@@ -1,0 +1,11 @@
+# Include core requirements
+-r requirements-core.txt
+
+# Basic optional features
+igraph>=0.11.3
+scipy>=1.11.4
+fastapi>=0.104.1
+uvicorn>=0.24.0
+httpx>=0.25.2
+plotly>=5.17.0
+dash>=2.15.0

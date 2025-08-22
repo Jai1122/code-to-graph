@@ -1,0 +1,33 @@
+# Include essential files in the package distribution
+include README.md
+include GETTING_STARTED.md
+include LICENSE
+include requirements.txt
+include dev-requirements.txt
+include .env.example
+
+# Include configuration files
+recursive-include config *.yaml *.example
+
+# Include scripts
+recursive-include scripts *.sh
+
+# Include Docker files
+include docker-compose.yml
+include Dockerfile
+
+# Include documentation
+recursive-include docs *.md *.rst *.txt
+
+# Exclude development and test files
+exclude pyproject.toml
+exclude poetry.lock
+global-exclude __pycache__
+global-exclude *.py[co]
+global-exclude .pytest_cache
+global-exclude .coverage
+global-exclude .DS_Store
+prune .git
+prune .venv
+prune .mypy_cache
+prune tests/__pycache__
