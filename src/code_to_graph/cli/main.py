@@ -570,10 +570,19 @@ def status() -> None:
     # Add LLM configuration details
     if settings.llm.provider == "ollama":
         table.add_row("LLM URL", "ℹ Info", settings.llm.ollama_base_url)
+        table.add_row("LLM Model", "ℹ Info", settings.llm.ollama_model)
     elif settings.llm.provider == "vllm":
         table.add_row("LLM URL", "ℹ Info", settings.llm.vllm_base_url)
-        api_key_status = "Configured" if settings.llm.vllm_api_key else "Not configured"
+        api_key_status = "Configured" if settings.llm.vllm_api_key else "❌ Missing"
         table.add_row("API Key", "ℹ Info", api_key_status)
+        table.add_row("LLM Model", "ℹ Info", settings.llm.vllm_model)
+        # Add VLLM-specific info for VPN environments
+        if "vllm" in settings.llm.vllm_base_url.lower():
+            table.add_row("Environment", "ℹ Info", "VPN/Secured")
+    elif settings.llm.provider == "openai":
+        api_key_status = "Configured" if settings.llm.openai_api_key else "❌ Missing"
+        table.add_row("OpenAI Key", "ℹ Info", api_key_status)
+        table.add_row("LLM Model", "ℹ Info", settings.llm.openai_model)
     
     # Configuration
     table.add_row("Chunk Size", "ℹ Info", str(settings.processing.max_chunk_size))
