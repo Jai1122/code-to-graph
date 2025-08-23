@@ -18,12 +18,21 @@ neo4j:
 
 # LLM configuration
 llm:
-  # Primary provider: openai, ollama, local
+  # Primary provider: ollama, vllm, openai
   provider: "ollama"
   
-  # OLLAMA settings (recommended)
+  # OLLAMA settings (for local inference)
   ollama_base_url: "http://localhost:11434"
   ollama_model: "qwen3:1.7b"
+  
+  # VLLM settings (for remote inference with API key)
+  vllm_base_url: "https://your-vllm-endpoint.com"
+  vllm_api_key: "your_api_key_here"
+  vllm_model: "/app/models/qwen3:14b"
+  
+  # OpenAI settings (alternative provider)
+  openai_api_key: "your_openai_key_here"
+  openai_model: "gpt-4o"
   
   # General settings
   max_tokens: 2048

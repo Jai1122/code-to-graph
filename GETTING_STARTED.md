@@ -11,10 +11,11 @@ CodeToGraph is a powerful tool for analyzing codebases and storing relationships
    - [OLLAMA (Local)](#ollama-local)
    - [VLLM (Remote)](#vllm-remote)
    - [OpenAI](#openai)
-5. [Database Setup](#database-setup)
-6. [Running the Application](#running-the-application)
-7. [Common Use Cases](#common-use-cases)
-8. [Troubleshooting](#troubleshooting)
+5. [Joern CPG Setup](#joern-cpg-setup)
+6. [Database Setup](#database-setup)
+7. [Running the Application](#running-the-application)
+8. [Common Use Cases](#common-use-cases)
+9. [Troubleshooting](#troubleshooting)
 
 ## System Requirements
 
@@ -187,6 +188,148 @@ CodeToGraph supports multiple LLM providers. Choose the one that best fits your 
    LLM_OPENAI_API_KEY=sk-your-openai-key-here
    LLM_OPENAI_MODEL=gpt-4o
    ```
+
+## Joern CPG Setup
+
+Joern is a code property graph generator that provides deep semantic analysis of code. It's optional but provides enhanced analysis capabilities.
+
+**Note**: Joern CLI is not included in the repository and must be installed manually.
+
+### Prerequisites for Joern
+
+- **Java**: JDK 11 or higher
+- **Memory**: At least 4GB available RAM
+- **Storage**: 1GB free space for Joern installation
+
+### Installation Methods
+
+#### Method 1: Download Pre-built Release (Recommended)
+
+1. **Download Joern**:
+   ```bash
+   # Create joern directory
+   mkdir -p tools/joern
+   cd tools/joern
+   
+   # Download latest release (check https://github.com/joernio/joern/releases for latest version)
+   wget https://github.com/joernio/joern/releases/download/v2.0.0/joern-cli.zip
+   
+   # Extract
+   unzip joern-cli.zip
+   mv joern-cli/* .
+   rmdir joern-cli
+   rm joern-cli.zip
+   ```
+
+2. **Make executable**:
+   ```bash
+   chmod +x joern
+   chmod +x joern-parse
+   chmod +x joern-export
+   ```
+
+3. **Test installation**:
+   ```bash
+   ./joern --version
+   ```
+
+#### Method 2: Build from Source
+
+1. **Clone and build**:
+   ```bash
+   # Clone Joern repository
+   git clone https://github.com/joernio/joern.git tools/joern-src
+   cd tools/joern-src
+   
+   # Build (requires sbt)
+   sbt stage
+   
+   # Copy built CLI to tools directory
+   cp -r joern-cli/target/universal/stage/* ../joern/
+   ```
+
+### Configuration in CodeToGraph
+
+1. **Set Joern path** in your `.env` file:
+   ```bash
+   # Path to Joern CLI executable
+   JOERN_CLI_PATH=/full/path/to/CodeToGraph/tools/joern/joern
+   
+   # Enable Joern processing
+   PROCESSING_ENABLE_JOERN=true
+   ```
+
+2. **Verify Joern integration**:
+   ```bash
+   # Test Joern availability
+   code-to-graph status
+   ```
+
+   Expected output should include:
+   ```
+   ┌─────────────┬─────────────┬─────────────────────────────────┐
+   │ Component   │ Status      │ Details                         │
+   ├─────────────┼─────────────┼─────────────────────────────────┤
+   │ Joern       │ ✓ Available │ v2.0.0 at tools/joern/joern     │
+   └─────────────┴─────────────┴─────────────────────────────────┘
+   ```
+
+### Troubleshooting Joern
+
+#### Java Issues
+
+```bash
+# Check Java version
+java -version
+
+# Java 11+ required
+sudo apt install openjdk-11-jdk  # Ubuntu
+brew install openjdk@11          # macOS
+```
+
+#### Memory Issues
+
+```bash
+# Increase JVM memory for Joern
+export JOERN_JVM_OPTS="-Xmx8g -Xms2g"
+```
+
+#### Path Issues
+
+```bash
+# Verify Joern path
+ls -la tools/joern/joern
+
+# Check if executable
+file tools/joern/joern
+
+# Test directly
+tools/joern/joern --version
+```
+
+### Language Support
+
+Joern provides enhanced analysis for:
+- **C/C++**: Full support
+- **Java**: Excellent support
+- **JavaScript/TypeScript**: Good support  
+- **Python**: Basic support
+- **Go**: Limited support
+- **C#**: Good support
+
+### Disabling Joern
+
+If you encounter issues or want faster processing, you can disable Joern:
+
+```bash
+# In .env file:
+PROCESSING_ENABLE_JOERN=false
+
+# Or as environment variable:
+export PROCESSING_ENABLE_JOERN=false
+```
+
+CodeToGraph will fall back to Tree-sitter-only parsing, which is faster but provides less detailed analysis.
 
 ## Database Setup
 

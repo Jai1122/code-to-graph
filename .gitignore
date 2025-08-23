@@ -337,10 +337,12 @@ neo4j_backups/
 # Tree-sitter parsers (auto-downloaded)
 tree-sitter-parsers/
 
-# Joern analysis
+# Joern analysis and installation
 joern-cli/
 joern_workspace/
 cpg_output/
+tools/joern/
+tools/joern-src/
 
 # LLM response cache
 llm_cache/
