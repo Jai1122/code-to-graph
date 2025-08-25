@@ -48,27 +48,44 @@ class TreeSitterParser:
         self.parsers = {}
         
         # Language initialization with error handling
-        language_configs = {
-            "go": ts_go.language(),
-            "java": ts_java.language(),
-            "python": ts_python.language(), 
-            "javascript": ts_javascript.language(),
-            "typescript": ts_javascript.language(),  # Use JS parser for TS
-        }
+        logger.debug("Loading Tree-sitter language modules...")
+        try:
+            language_configs = {
+                "go": ts_go.language(),
+                "java": ts_java.language(),
+                "python": ts_python.language(), 
+                "javascript": ts_javascript.language(),
+                "typescript": ts_javascript.language(),  # Use JS parser for TS
+            }
+            logger.debug(f"Successfully loaded {len(language_configs)} language configs")
+        except Exception as e:
+            logger.error(f"Failed to load Tree-sitter language modules: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            raise
         
         for lang_name, language_capsule in language_configs.items():
             try:
+                logger.debug(f"Attempting to initialize {lang_name} parser...")
+                logger.debug(f"  Language capsule type: {type(language_capsule)}")
+                
                 # Create Language object from capsule
                 language = Language(language_capsule)
                 self.languages[lang_name] = language
+                logger.debug(f"  Successfully created Language object for {lang_name}")
                 
                 # Create parser for this language with the language parameter
                 parser = Parser(language)
                 self.parsers[lang_name] = parser
+                logger.debug(f"  Successfully created Parser object for {lang_name}")
                 
-                logger.debug(f"Successfully initialized {lang_name} parser")
+                logger.info(f"✅ Successfully initialized {lang_name} parser")
             except Exception as e:
-                logger.warning(f"Failed to initialize {lang_name} parser: {e}")
+                logger.error(f"❌ Failed to initialize {lang_name} parser: {e}")
+                logger.error(f"   Error type: {type(e).__name__}")
+                logger.error(f"   Language capsule: {language_capsule}")
+                import traceback
+                logger.error(f"   Full traceback: {traceback.format_exc()}")
                 # Continue without this language
                 continue
         
