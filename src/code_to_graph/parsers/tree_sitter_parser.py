@@ -43,20 +43,39 @@ class TreeSitterParser:
     
     def __init__(self):
         """Initialize Tree-sitter parser with language support."""
-        self.languages = {
-            "go": Language(ts_go.language()),
-            "java": Language(ts_java.language()),
-            "python": Language(ts_python.language()),
-            "javascript": Language(ts_javascript.language()),
-            "typescript": Language(ts_javascript.language()),  # Use JS parser for TS
+        # Initialize languages with the correct Tree-sitter API
+        self.languages = {}
+        self.parsers = {}
+        
+        # Language initialization with error handling
+        language_configs = {
+            "go": ts_go.language(),
+            "java": ts_java.language(),
+            "python": ts_python.language(), 
+            "javascript": ts_javascript.language(),
+            "typescript": ts_javascript.language(),  # Use JS parser for TS
         }
         
-        self.parsers = {}
-        for lang_name, language in self.languages.items():
-            parser = Parser(language)
-            self.parsers[lang_name] = parser
+        for lang_name, language_capsule in language_configs.items():
+            try:
+                # Create Language object from capsule
+                language = Language(language_capsule)
+                self.languages[lang_name] = language
+                
+                # Create parser for this language with the language parameter
+                parser = Parser(language)
+                self.parsers[lang_name] = parser
+                
+                logger.debug(f"Successfully initialized {lang_name} parser")
+            except Exception as e:
+                logger.warning(f"Failed to initialize {lang_name} parser: {e}")
+                # Continue without this language
+                continue
         
-        logger.info(f"Initialized Tree-sitter parser with {len(self.languages)} languages")
+        if not self.languages:
+            raise RuntimeError("No Tree-sitter languages could be initialized")
+            
+        logger.info(f"Initialized Tree-sitter parser with {len(self.languages)} languages: {list(self.languages.keys())}")
     
     def parse_file(self, file_info: FileInfo) -> Tuple[List[ParsedEntity], List[ParsedRelation]]:
         """Parse a single file and extract entities and relationships.
