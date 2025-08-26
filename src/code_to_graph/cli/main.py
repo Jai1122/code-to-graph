@@ -16,7 +16,7 @@ from ..processors.repository_analyzer import RepositoryAnalyzer
 from ..parsers.hybrid_parser import HybridParser
 from ..storage.neo4j_client import Neo4jClient
 from ..storage.graph_importer import GraphImporter
-from ..llm.ollama_client import OllamaClient
+# OLLAMA client removed - VLLM only
 from ..llm.vllm_client import VLLMClient
 from ..llm.code_analyzer import CodeAnalyzer
 from ..llm.llm_factory import LLMFactory
@@ -300,12 +300,9 @@ def analyze_code(model: Optional[str], file_path: Path) -> None:
     
     console.print(f"\n[bold blue]Analyzing code file:[/bold blue] {file_path}")
     
-    # Override model if specified
+    # Override model if specified (VLLM only)
     if model:
-        if settings.llm.provider == "ollama":
-            settings.llm.ollama_model = model
-        elif settings.llm.provider == "vllm":
-            settings.llm.vllm_model = model
+        settings.llm.vllm_model = model
     
     try:
         # Read file content
@@ -315,12 +312,9 @@ def analyze_code(model: Optional[str], file_path: Path) -> None:
         # Initialize LLM client using factory
         with LLMFactory.create_client() as llm_client:
             if not llm_client.check_health():
-                console.print(f"[red]Cannot connect to {settings.llm.provider.upper()} server[/red]")
+                console.print(f"[red]Cannot connect to VLLM server[/red]")
                 console.print(f"Provider: {settings.llm.provider}")
-                if settings.llm.provider == "ollama":
-                    console.print(f"URL: {settings.llm.ollama_base_url}")
-                elif settings.llm.provider == "vllm":
-                    console.print(f"URL: {settings.llm.vllm_base_url}")
+                console.print(f"URL: {settings.llm.vllm_base_url}")
                 return
             
             analyzer = CodeAnalyzer(llm_client)
@@ -370,12 +364,9 @@ def repo_insights(model: Optional[str], repo_path: Path, max_files: int) -> None
     
     console.print(f"\n[bold blue]Analyzing repository:[/bold blue] {repo_path}")
     
-    # Override model if specified
+    # Override model if specified (VLLM only)
     if model:
-        if settings.llm.provider == "ollama":
-            settings.llm.ollama_model = model
-        elif settings.llm.provider == "vllm":
-            settings.llm.vllm_model = model
+        settings.llm.vllm_model = model
     
     try:
         # Find source files
@@ -431,10 +422,7 @@ def llm_status() -> None:
         with LLMFactory.create_client() as client:
             # Check health
             if client.check_health():
-                if settings.llm.provider == "ollama":
-                    console.print(f"[green]✓ Connected to {settings.llm.ollama_base_url}[/green]")
-                elif settings.llm.provider == "vllm":
-                    console.print(f"[green]✓ Connected to {settings.llm.vllm_base_url}[/green]")
+                console.print(f"[green]✓ Connected to {settings.llm.vllm_base_url}[/green]")
                 
                 # List models
                 models = client.list_models()
@@ -442,36 +430,22 @@ def llm_status() -> None:
                 if models:
                     table = Table(title="Available Models")
                     table.add_column("Model", style="cyan")
+                    table.add_column("ID", style="magenta")
+                    table.add_column("Object", style="green")
                     
-                    if settings.llm.provider == "ollama":
-                        table.add_column("Size", style="magenta")
-                        table.add_column("Modified", style="green")
-                        
-                        for model in models:
-                            size = model.get('size', 0)
-                            size_str = f"{size / (1024**3):.1f}GB" if size > 0 else "Unknown"
-                            modified = model.get('modified_at', 'Unknown')[:19] if 'modified_at' in model else 'Unknown'
-                            table.add_row(
-                                model.get('name', 'Unknown'),
-                                size_str,
-                                modified
-                            )
-                    else:  # VLLM
-                        table.add_column("ID", style="magenta")
-                        table.add_column("Object", style="green")
-                        
-                        for model in models:
-                            table.add_row(
-                                model.get('id', 'Unknown'),
-                                model.get('id', 'Unknown'),
-                                model.get('object', 'model')
-                            )
+                    # VLLM model listing
+                    for model in models:
+                        table.add_row(
+                            model.get('id', 'Unknown'),
+                            model.get('id', 'Unknown'), 
+                            model.get('object', 'model')
+                        )
                     
                     console.print(table)
                 else:
                     console.print("[yellow]No models found[/yellow]")
             else:
-                base_url = settings.llm.ollama_base_url if settings.llm.provider == "ollama" else settings.llm.vllm_base_url
+                base_url = settings.llm.vllm_base_url
                 console.print(f"[red]✗ Cannot connect to {base_url}[/red]")
                 console.print(f"Make sure {provider} server is running and accessible")
                 if settings.llm.provider == "vllm" and not settings.llm.vllm_api_key:
@@ -482,49 +456,7 @@ def llm_status() -> None:
         console.print(f"[red]Status check failed: {e}[/red]")
 
 
-@main.command()
-@click.option('--ollama-url', default='http://localhost:11434', help='OLLAMA server URL')
-def ollama_status(ollama_url: str) -> None:
-    """Check OLLAMA server status and list models (legacy command)."""
-    
-    console.print(f"\n[bold yellow]⚠️  This command is deprecated. Use 'llm-status' instead.[/bold yellow]")
-    console.print(f"\n[bold blue]OLLAMA Server Status[/bold blue]")
-    
-    try:
-        with OllamaClient(base_url=ollama_url) as ollama:
-            # Check health
-            if ollama.check_health():
-                console.print(f"[green]✓ Connected to {ollama_url}[/green]")
-                
-                # List models
-                models = ollama.list_models()
-                
-                if models:
-                    table = Table(title="Available Models")
-                    table.add_column("Model", style="cyan")
-                    table.add_column("Size", style="magenta")
-                    table.add_column("Modified", style="green")
-                    
-                    for model in models:
-                        size = model.get('size', 0)
-                        size_str = f"{size / (1024**3):.1f}GB" if size > 0 else "Unknown"
-                        modified = model.get('modified_at', 'Unknown')[:19] if 'modified_at' in model else 'Unknown'
-                        table.add_row(
-                            model.get('name', 'Unknown'),
-                            size_str,
-                            modified
-                        )
-                    
-                    console.print(table)
-                else:
-                    console.print("[yellow]No models found[/yellow]")
-            else:
-                console.print(f"[red]✗ Cannot connect to {ollama_url}[/red]")
-                console.print("Make sure OLLAMA is running")
-                
-    except Exception as e:
-        logger.error(f"OLLAMA status check failed: {e}")
-        console.print(f"[red]Status check failed: {e}[/red]")
+# OLLAMA command removed - VLLM only
 
 
 @main.command()
@@ -567,22 +499,14 @@ def status() -> None:
     except Exception as e:
         table.add_row(f"LLM ({settings.llm.provider.upper()})", "✗ Failed", f"Error: {str(e)[:50]}")
     
-    # Add LLM configuration details
-    if settings.llm.provider == "ollama":
-        table.add_row("LLM URL", "ℹ Info", settings.llm.ollama_base_url)
-        table.add_row("LLM Model", "ℹ Info", settings.llm.ollama_model)
-    elif settings.llm.provider == "vllm":
-        table.add_row("LLM URL", "ℹ Info", settings.llm.vllm_base_url)
-        api_key_status = "Configured" if settings.llm.vllm_api_key else "❌ Missing"
+    # VLLM configuration details (only if provider is VLLM)
+    if settings.llm.provider.lower() == "vllm":
+        api_key_status = "✓ Configured" if settings.llm.vllm_api_key else "❌ Missing"
         table.add_row("API Key", "ℹ Info", api_key_status)
         table.add_row("LLM Model", "ℹ Info", settings.llm.vllm_model)
         # Add VLLM-specific info for VPN environments
-        if "vllm" in settings.llm.vllm_base_url.lower():
+        if "vllm" in settings.llm.vllm_base_url.lower() or "secure" in settings.llm.vllm_base_url.lower():
             table.add_row("Environment", "ℹ Info", "VPN/Secured")
-    elif settings.llm.provider == "openai":
-        api_key_status = "Configured" if settings.llm.openai_api_key else "❌ Missing"
-        table.add_row("OpenAI Key", "ℹ Info", api_key_status)
-        table.add_row("LLM Model", "ℹ Info", settings.llm.openai_model)
     
     # Configuration
     table.add_row("Chunk Size", "ℹ Info", str(settings.processing.max_chunk_size))

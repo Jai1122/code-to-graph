@@ -7,10 +7,7 @@ CodeToGraph is a powerful tool for analyzing codebases and storing relationships
 1. [System Requirements](#system-requirements)
 2. [Installation](#installation)
 3. [Configuration](#configuration)
-4. [LLM Provider Setup](#llm-provider-setup)
-   - [OLLAMA (Local)](#ollama-local)
-   - [VLLM (Remote)](#vllm-remote)
-   - [OpenAI](#openai)
+4. [VLLM Setup](#vllm-setup)
 5. [Joern CPG Setup](#joern-cpg-setup)
 6. [Database Setup](#database-setup)
 7. [Running the Application](#running-the-application)
@@ -55,21 +52,37 @@ source .venv/bin/activate
 ### 3. Install Dependencies
 
 ```bash
-# Install in development mode
+# Recommended: Install in development mode (includes all dependencies)
 pip install -e .
 
-# Or install from requirements
+# Alternative: Install from requirements file
 pip install -r requirements.txt
+
+# Note: This installs ALL required dependencies including:
+# - Tree-sitter language parsers (go, java, python, javascript)
+# - Visualization libraries (dash, plotly, networkx)
+# - Database clients (neo4j, pandas)
+# - LLM integrations (httpx for OLLAMA/VLLM)
 ```
 
 ### 4. Install Additional Dependencies
 
 ```bash
-# For visualization features
-pip install dash plotly networkx pandas
+# All dependencies are already included in requirements.txt
+# The following are already installed when you run 'pip install -e .'
 
-# For parsing capabilities
-pip install tree-sitter tree-sitter-languages
+# Core parsing capabilities (already included):
+# tree-sitter>=0.20.4
+# tree-sitter-go>=0.20.0
+# tree-sitter-java>=0.20.2
+# tree-sitter-python>=0.20.4
+# tree-sitter-javascript>=0.20.3
+
+# Visualization features (already included):
+# dash>=2.15.0
+# plotly>=5.17.0
+# networkx>=3.2.1
+# pandas>=2.1.4
 ```
 
 ## Configuration
@@ -87,8 +100,8 @@ cp .env.example .env
 Open `.env` and configure your settings:
 
 ```bash
-# ===== LLM Provider Configuration =====
-# Choose your provider: ollama, vllm, openai
+# ===== VLLM Configuration =====
+# VLLM is the only supported provider
 LLM_PROVIDER=vllm
 
 # VLLM Configuration (for remote inference)
@@ -104,63 +117,27 @@ PROCESSING_MAX_CHUNK_SIZE=100
 PROCESSING_MAX_MEMORY_GB=16
 ```
 
-## LLM Provider Setup
+## VLLM Setup
 
-CodeToGraph supports multiple LLM providers. Choose the one that best fits your environment:
+CodeToGraph is designed for secured environments with remote VLLM inference endpoints.
 
-### OLLAMA (Local)
+### VLLM Configuration
 
-**Best for**: Local development, offline environments, full control over models
-
-#### Setup:
-
-1. **Install OLLAMA**:
-   ```bash
-   # Linux/macOS
-   curl -fsSL https://ollama.ai/install.sh | sh
-   
-   # Or download from https://ollama.ai
-   ```
-
-2. **Start OLLAMA service**:
-   ```bash
-   ollama serve
-   ```
-
-3. **Pull a model**:
-   ```bash
-   # Lightweight model
-   ollama pull qwen3:1.7b
-   
-   # More capable model
-   ollama pull qwen3:14b
-   ```
-
-4. **Configure CodeToGraph**:
-   ```bash
-   # In .env file:
-   LLM_PROVIDER=ollama
-   LLM_OLLAMA_BASE_URL=http://localhost:11434
-   LLM_OLLAMA_MODEL=qwen3:1.7b
-   ```
-
-### VLLM (Remote)
-
-**Best for**: Secured environments, VPN-connected systems, production deployments
+**Ideal for**: VPN-connected systems, enterprise deployments, secured environments
 
 #### Setup:
 
 1. **Obtain Access**:
-   - Get your VLLM endpoint URL
-   - Obtain your API key
+   - Get your VLLM endpoint URL from your system administrator
+   - Obtain your API key for authentication
    - Confirm VPN access if required
 
 2. **Configure CodeToGraph**:
    ```bash
    # In .env file:
    LLM_PROVIDER=vllm
-   LLM_VLLM_BASE_URL=https://vllm.com
-   LLM_VLLM_API_KEY=sk-your-actual-key-here
+   LLM_VLLM_BASE_URL=https://your-secure-vllm-endpoint.com
+   LLM_VLLM_API_KEY=your-actual-api-key
    LLM_VLLM_MODEL=/app/models/qwen3:14b
    ```
 
@@ -171,23 +148,24 @@ CodeToGraph supports multiple LLM providers. Choose the one that best fits your 
    
    # Test VLLM connection
    code-to-graph llm-status
+   
+   # Check overall system status
+   code-to-graph status
    ```
 
-### OpenAI
+### VLLM Configuration Options
 
-**Best for**: Quick testing, maximum compatibility
+```bash
+# Required settings
+LLM_VLLM_BASE_URL=https://your-endpoint.com    # Your VLLM server URL
+LLM_VLLM_API_KEY=your-api-key                  # Authentication key
+LLM_VLLM_MODEL=/app/models/qwen3:14b           # Model path
 
-#### Setup:
-
-1. **Get API Key** from [OpenAI Platform](https://platform.openai.com/)
-
-2. **Configure CodeToGraph**:
-   ```bash
-   # In .env file:
-   LLM_PROVIDER=openai
-   LLM_OPENAI_API_KEY=sk-your-openai-key-here
-   LLM_OPENAI_MODEL=gpt-4o
-   ```
+# Optional tuning
+LLM_MAX_TOKENS=2048                            # Max response length
+LLM_TEMPERATURE=0.1                            # Response creativity (0.0-1.0)  
+LLM_TIMEOUT=120                                # Request timeout in seconds
+```
 
 ## Joern CPG Setup
 

@@ -273,8 +273,8 @@ models/
 # Hugging Face cache
 .cache/huggingface/
 
-# OLLAMA models (if downloaded locally)
-.ollama/
+# LLM model files (if any local caching)
+.llm_cache/
 
 # ===== Backup and Temporary Files =====
 # Backup files

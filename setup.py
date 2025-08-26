@@ -53,8 +53,7 @@ setup(
     extras_require={
         "dev": dev_requirements,
         "full": [
-            # Read from requirements-optional.txt
-            "openai>=1.6.1",
+            # VLLM-only dependencies
             "transformers>=4.36.2",
             "igraph>=0.11.3",
             "scipy>=1.11.4",
@@ -63,6 +62,7 @@ setup(
             "httpx>=0.25.2",
             "plotly>=5.17.0",
             "dash>=2.15.0",
+            "requests>=2.31.0",
         ],
         "test": [
             "pytest>=7.4.3",

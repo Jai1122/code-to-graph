@@ -4,22 +4,21 @@ from typing import Dict, Any, List, Optional, Union
 from pathlib import Path
 from loguru import logger
 
-from .ollama_client import OllamaClient
 from .vllm_client import VLLMClient
 
 
 class CodeAnalyzer:
-    """Analyze code using various LLM providers for insights and documentation."""
+    """Analyze code using VLLM provider for insights and documentation."""
     
-    def __init__(self, llm_client: Union[OllamaClient, VLLMClient]):
+    def __init__(self, llm_client: VLLMClient):
         """Initialize code analyzer.
         
         Args:
-            llm_client: LLM client instance (OLLAMA or VLLM)
+            llm_client: VLLM client instance
         """
         self.llm_client = llm_client
-        self.client_type = "ollama" if isinstance(llm_client, OllamaClient) else "vllm"
-        logger.info(f"Initialized code analyzer with {self.client_type.upper()}")
+        self.client_type = "vllm"
+        logger.info(f"Initialized code analyzer with VLLM")
     
     def _generate_response(self, prompt: str, system_prompt: str, temperature: float, max_tokens: int):
         """Generate response using the configured LLM client.
@@ -33,25 +32,16 @@ class CodeAnalyzer:
         Returns:
             Response text
         """
-        if self.client_type == "ollama":
-            response = self.llm_client.generate_sync(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            return response.response
-        else:  # VLLM
-            response = self.llm_client.generate_sync(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            # Extract text from VLLM response
-            if response.choices and len(response.choices) > 0:
-                return response.choices[0].get("text", "")
-            return ""
+        response = self.llm_client.generate_sync(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        # Extract text from VLLM response
+        if response.choices and len(response.choices) > 0:
+            return response.choices[0].get("text", "")
+        return ""
     
     def analyze_code_structure(self, code: str, language: str = "unknown") -> Dict[str, Any]:
         """Analyze code structure and provide insights.

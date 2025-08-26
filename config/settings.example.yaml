@@ -16,23 +16,15 @@ neo4j:
   max_connection_lifetime: 3600
   max_connection_pool_size: 50
 
-# LLM configuration
+# LLM configuration - VLLM only
 llm:
-  # Primary provider: ollama, vllm, openai
-  provider: "ollama"
-  
-  # OLLAMA settings (for local inference)
-  ollama_base_url: "http://localhost:11434"
-  ollama_model: "qwen3:1.7b"
+  # VLLM is the only supported provider
+  provider: "vllm"
   
   # VLLM settings (for remote inference with API key)
   vllm_base_url: "https://your-vllm-endpoint.com"
   vllm_api_key: "REPLACE_WITH_YOUR_API_KEY"
   vllm_model: "/app/models/qwen3:14b"
-  
-  # OpenAI settings (alternative provider)
-  openai_api_key: "REPLACE_WITH_YOUR_OPENAI_KEY"
-  openai_model: "gpt-4o"
   
   # General settings
   max_tokens: 2048

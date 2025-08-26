@@ -1,71 +1,52 @@
-"""Factory for creating LLM clients based on configuration."""
+"""Factory for creating VLLM clients."""
 
-from typing import Union
 from loguru import logger
 
 from ..core.config import settings
-from .ollama_client import OllamaClient
 from .vllm_client import VLLMClient
 
 
 class LLMFactory:
-    """Factory for creating appropriate LLM clients based on configuration."""
+    """Factory for creating VLLM clients."""
     
     @staticmethod
-    def create_client() -> Union[OllamaClient, VLLMClient]:
-        """Create an LLM client based on the current configuration.
+    def create_client() -> VLLMClient:
+        """Create a VLLM client based on the current configuration.
         
         Returns:
-            Configured LLM client instance
+            Configured VLLM client instance
             
         Raises:
-            ValueError: If the provider is unsupported
+            ValueError: If VLLM is not configured properly
         """
-        provider = settings.llm.provider.lower()
-        
-        if provider == "ollama":
-            logger.info(f"Creating OLLAMA client with model: {settings.llm.ollama_model}")
-            return OllamaClient(
-                base_url=settings.llm.ollama_base_url,
-                model=settings.llm.ollama_model,
-                timeout=settings.llm.timeout
-            )
-        elif provider == "vllm":
-            logger.info(f"Creating VLLM client with model: {settings.llm.vllm_model}")
-            return VLLMClient(
-                base_url=settings.llm.vllm_base_url,
-                model=settings.llm.vllm_model,
-                api_key=settings.llm.vllm_api_key,
-                timeout=settings.llm.timeout
-            )
-        else:
+        if settings.llm.provider.lower() != "vllm":
             raise ValueError(
-                f"Unsupported LLM provider: {provider}. "
-                f"Supported providers: ollama, vllm"
+                f"Only VLLM provider is supported. Current provider: {settings.llm.provider}"
             )
+        
+        logger.info(f"Creating VLLM client with model: {settings.llm.vllm_model}")
+        return VLLMClient(
+            base_url=settings.llm.vllm_base_url,
+            model=settings.llm.vllm_model,
+            api_key=settings.llm.vllm_api_key,
+            timeout=settings.llm.timeout
+        )
     
     @staticmethod
     def get_model_name() -> str:
-        """Get the model name for the current provider.
+        """Get the VLLM model name.
         
         Returns:
-            Model name string
+            VLLM model name string
         """
-        provider = settings.llm.provider.lower()
-        
-        if provider == "ollama":
-            return settings.llm.ollama_model
-        elif provider == "vllm":
-            return settings.llm.vllm_model
-        else:
-            return "unknown"
+        return settings.llm.vllm_model
     
     @staticmethod
     def check_health() -> bool:
-        """Check if the configured LLM provider is healthy.
+        """Check if the VLLM provider is healthy.
         
         Returns:
-            True if provider is healthy, False otherwise
+            True if VLLM is healthy, False otherwise
         """
         try:
             client = LLMFactory.create_client()
@@ -73,5 +54,5 @@ class LLMFactory:
             client.close()
             return health
         except Exception as e:
-            logger.error(f"Health check failed for {settings.llm.provider}: {e}")
+            logger.error(f"VLLM health check failed: {e}")
             return False

@@ -22,21 +22,13 @@ class Neo4jSettings(BaseSettings):
 
 
 class LLMSettings(BaseSettings):
-    """LLM configuration for various providers."""
+    """VLLM configuration for remote inference."""
     
-    # Primary LLM provider
-    provider: str = Field(default="ollama", description="LLM provider: openai, ollama, vllm, local")
-    
-    # OpenAI settings
-    openai_api_key: Optional[str] = Field(default=None, description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4o", description="OpenAI model name")
-    
-    # OLLAMA settings (recommended for local)
-    ollama_base_url: str = Field(default="http://localhost:11434", description="OLLAMA server base URL")
-    ollama_model: str = Field(default="qwen3:1.7b", description="OLLAMA model name")
+    # VLLM is the only supported provider
+    provider: str = Field(default="vllm", description="LLM provider (vllm only)")
     
     # VLLM settings (for remote inference)
-    vllm_base_url: str = Field(default="https://vllm.com", description="VLLM server base URL")
+    vllm_base_url: str = Field(default="https://vllm.example.com", description="VLLM server base URL")
     vllm_api_key: Optional[str] = Field(default=None, description="VLLM API key for authentication")
     vllm_model: str = Field(default="/app/models/qwen3:14b", description="VLLM model name")
     
