@@ -447,9 +447,20 @@ def llm_status() -> None:
             else:
                 base_url = settings.llm.vllm_base_url
                 console.print(f"[red]✗ Cannot connect to {base_url}[/red]")
-                console.print(f"Make sure {provider} server is running and accessible")
-                if settings.llm.provider == "vllm" and not settings.llm.vllm_api_key:
-                    console.print("[yellow]Note: VLLM API key may be required[/yellow]")
+                
+                # Check for placeholder/example configuration
+                if "example.com" in base_url or "your-" in base_url.lower():
+                    console.print("[yellow]⚠️  Using example/placeholder configuration![/yellow]")
+                    console.print("[yellow]   Please update your .env file with actual VLLM endpoint details:[/yellow]")
+                    console.print("[yellow]   - LLM_VLLM_BASE_URL=https://your-actual-vllm-endpoint.com[/yellow]")
+                    console.print("[yellow]   - LLM_VLLM_API_KEY=your-actual-api-key[/yellow]")
+                elif settings.llm.vllm_api_key and "your_" in settings.llm.vllm_api_key:
+                    console.print("[yellow]⚠️  Using placeholder API key![/yellow]")
+                    console.print("[yellow]   Please update LLM_VLLM_API_KEY in your .env file[/yellow]")
+                else:
+                    console.print(f"Make sure {provider} server is running and accessible")
+                    if settings.llm.provider == "vllm" and not settings.llm.vllm_api_key:
+                        console.print("[yellow]Note: VLLM API key may be required[/yellow]")
                 
     except Exception as e:
         logger.error(f"{provider} status check failed: {e}")
@@ -501,11 +512,22 @@ def status() -> None:
     
     # VLLM configuration details (only if provider is VLLM)
     if settings.llm.provider.lower() == "vllm":
-        api_key_status = "✓ Configured" if settings.llm.vllm_api_key else "❌ Missing"
+        # Check API key status with placeholder detection
+        if not settings.llm.vllm_api_key:
+            api_key_status = "❌ Missing"
+        elif "your_" in settings.llm.vllm_api_key or "api_key_here" in settings.llm.vllm_api_key:
+            api_key_status = "⚠️  Placeholder - needs update"
+        else:
+            api_key_status = "✓ Configured"
+            
         table.add_row("API Key", "ℹ Info", api_key_status)
         table.add_row("LLM Model", "ℹ Info", settings.llm.vllm_model)
+        
         # Add VLLM-specific info for VPN environments
-        if "vllm" in settings.llm.vllm_base_url.lower() or "secure" in settings.llm.vllm_base_url.lower():
+        base_url = settings.llm.vllm_base_url.lower()
+        if "example.com" in base_url or "your-" in base_url:
+            table.add_row("Environment", "⚠️  Config", "Placeholder - needs update")
+        elif "vllm" in base_url or "secure" in base_url:
             table.add_row("Environment", "ℹ Info", "VPN/Secured")
     
     # Configuration
