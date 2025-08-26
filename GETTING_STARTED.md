@@ -195,7 +195,7 @@ Joern is a code property graph generator that provides deep semantic analysis of
    # Extract
    unzip joern-cli.zip
    mv joern-cli/* .
-   rmdir joern-cli
+   rm -rf joern-cli
    rm joern-cli.zip
    ```
 
