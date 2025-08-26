@@ -231,6 +231,75 @@ class JoernParser:
         logger.debug(f"Prepared {len(source_files)} files for chunk processing")
         return source_files
     
+    def _find_frontend_executable(self, frontend_name: str) -> Optional[Path]:
+        """Find the correct path for a Joern frontend executable.
+        
+        Args:
+            frontend_name: Name of the frontend (e.g., 'gosrc2cpg')
+            
+        Returns:
+            Path to the frontend executable or None if not found
+        """
+        if not self.joern_path:
+            return None
+        
+        # Common paths where frontends might be located
+        search_paths = [
+            # Standard Joern installation structure
+            self.joern_path / "bin" / frontend_name,
+            self.joern_path / frontend_name,
+            
+            # Alternative structures
+            self.joern_path / "joern-cli" / "bin" / frontend_name,
+            self.joern_path / "joern-cli" / frontend_name,
+            
+            # Tools directory variations
+            self.joern_path / "tools" / frontend_name,
+            self.joern_path / "tools" / "bin" / frontend_name,
+            
+            # Parent directory patterns (if joern_path points to subdirectory)
+            self.joern_path.parent / "bin" / frontend_name,
+            self.joern_path.parent / frontend_name,
+        ]
+        
+        # Check each possible path
+        for path in search_paths:
+            if path.exists() and path.is_file():
+                # Check if it's executable
+                try:
+                    if path.stat().st_mode & 0o111:  # Check execute permission
+                        logger.debug(f"Found frontend executable: {path}")
+                        return path
+                except Exception as e:
+                    logger.debug(f"Error checking {path}: {e}")
+                    continue
+        
+        # Search recursively in the Joern installation directory
+        if self.joern_path.exists():
+            for candidate in self.joern_path.rglob(frontend_name):
+                if candidate.is_file():
+                    try:
+                        if candidate.stat().st_mode & 0o111:
+                            logger.debug(f"Found frontend via recursive search: {candidate}")
+                            return candidate
+                    except Exception:
+                        continue
+        
+        logger.warning(f"Frontend '{frontend_name}' not found in Joern installation")
+        logger.info(f"Searched in Joern path: {self.joern_path}")
+        logger.info("Available files in Joern installation:")
+        
+        # List available executables for debugging
+        try:
+            if self.joern_path.exists():
+                for path in self.joern_path.rglob("*"):
+                    if path.is_file() and path.name.endswith(("2cpg", "src2cpg")):
+                        logger.info(f"  Found CPG tool: {path}")
+        except Exception as e:
+            logger.debug(f"Error listing Joern files: {e}")
+        
+        return None
+    
     def _generate_cpg(self, source_dir: Path, language: str, chunk_id: str) -> Optional[Path]:
         """Generate CPG using appropriate Joern frontend.
         
@@ -259,9 +328,15 @@ class JoernParser:
             return None
         
         try:
+            # Find the correct frontend executable path
+            frontend_path = self._find_frontend_executable(frontend)
+            if not frontend_path:
+                logger.error(f"Joern frontend '{frontend}' not found in installation")
+                return None
+            
             # Build command
             cmd = [
-                str(self.joern_path / "bin" / frontend),
+                str(frontend_path),
                 str(source_dir),
                 "-o", str(cpg_file)
             ]
@@ -271,6 +346,7 @@ class JoernParser:
             env["JAVA_OPTS"] = f"-Xmx{self.heap_size} -XX:+UseG1GC -XX:MaxGCPauseMillis=200"
             
             logger.debug(f"Running Joern command: {' '.join(cmd)}")
+            logger.info(f"Using frontend: {frontend_path}")
             
             # Run with timeout to prevent hanging
             result = subprocess.run(
