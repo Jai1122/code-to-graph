@@ -61,7 +61,23 @@ class Neo4jClient:
             return driver
             
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Failed to connect to Neo4j: {e}")
+            
+            # Provide helpful error guidance
+            if "Connection refused" in error_msg:
+                logger.error("Neo4j server is not running or not accessible")
+                logger.info("Solutions:")
+                logger.info("  1. Start Neo4j: docker run -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password123 neo4j:latest")
+                logger.info("  2. Or check if Neo4j is running: docker ps")
+                logger.info("  3. Verify connection settings in .env file")
+            elif "authentication" in error_msg.lower() or "unauthorized" in error_msg.lower():
+                logger.error("Neo4j authentication failed")
+                logger.info("Solutions:")
+                logger.info("  1. Check NEO4J_USERNAME and NEO4J_PASSWORD in .env file")
+                logger.info("  2. Default credentials are usually neo4j/password123")
+                logger.info("  3. Reset Neo4j password if needed")
+            
             raise
     
     def close(self) -> None:

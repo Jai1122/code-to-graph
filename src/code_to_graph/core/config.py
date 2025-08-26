@@ -19,6 +19,10 @@ class Neo4jSettings(BaseSettings):
     
     class Config:
         env_prefix = "NEO4J_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables
 
 
 class LLMSettings(BaseSettings):
@@ -43,6 +47,10 @@ class LLMSettings(BaseSettings):
     
     class Config:
         env_prefix = "LLM_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables
 
 
 class ProcessingSettings(BaseSettings):
@@ -76,6 +84,10 @@ class ProcessingSettings(BaseSettings):
     
     class Config:
         env_prefix = "PROCESSING_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables
 
 
 class VisualizationSettings(BaseSettings):
@@ -100,6 +112,10 @@ class VisualizationSettings(BaseSettings):
     
     class Config:
         env_prefix = "VIZ_"
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        extra = "ignore"  # Ignore extra environment variables
 
 
 class Settings(BaseSettings):

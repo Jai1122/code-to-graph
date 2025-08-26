@@ -116,24 +116,39 @@ class JoernParser:
     
     def _find_joern_installation(self) -> Optional[Path]:
         """Find Joern installation automatically."""
+        # Check current directory first (common for local installations)
+        current_dir = Path(".")
+        if (current_dir / "joern-cli" / "joern").exists():
+            logger.info(f"Found Joern in current directory: {(current_dir / 'joern-cli').absolute()}")
+            return current_dir / "joern-cli"
+        
+        # Check if joern is in PATH
+        joern_executable = shutil.which("joern")
+        if joern_executable:
+            joern_path = Path(joern_executable).parent.parent  # Go up from bin/joern to joern root
+            logger.info(f"Found Joern in PATH: {joern_path}")
+            return joern_path
+        
         # Common installation paths
         possible_paths = [
             Path.home() / "joern",
             Path("/opt/joern"),
             Path("/usr/local/joern"),
+            Path.cwd() / "joern",
+            Path.cwd() / "joern-cli",
         ]
-        
-        # Check if joern is in PATH
-        joern_executable = shutil.which("joern")
-        if joern_executable:
-            return Path(joern_executable).parent
         
         # Check common paths
         for path in possible_paths:
             if (path / "joern").exists() or (path / "bin" / "joern").exists():
+                logger.info(f"Found Joern installation: {path}")
                 return path
         
         logger.warning("Joern installation not found automatically")
+        logger.info("Possible solutions:")
+        logger.info("  1. Install Joern in current directory as 'joern-cli'")
+        logger.info("  2. Add Joern to PATH")
+        logger.info("  3. Install in common location like ~/joern")
         return None
     
     def _prepare_chunk_files(self, chunk: Chunk, chunk_dir: Path) -> List[Path]:

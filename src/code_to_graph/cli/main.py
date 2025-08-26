@@ -495,7 +495,15 @@ def status() -> None:
     
     # Joern
     if settings.processing.enable_joern:
-        table.add_row("Joern", "? Unknown", "Path detection needed")
+        try:
+            from ..parsers.joern_parser import JoernParser
+            joern = JoernParser()
+            if joern.joern_path and joern.joern_path.exists():
+                table.add_row("Joern", "✓ Found", str(joern.joern_path))
+            else:
+                table.add_row("Joern", "✗ Not Found", "Run with --help for installation instructions")
+        except Exception as e:
+            table.add_row("Joern", "✗ Error", f"Detection failed: {str(e)[:30]}")
     else:
         table.add_row("Joern", "✗ Disabled", "")
     
