@@ -116,39 +116,87 @@ class JoernParser:
     
     def _find_joern_installation(self) -> Optional[Path]:
         """Find Joern installation automatically."""
-        # Check current directory first (common for local installations)
+        # Check JOERN_HOME environment variable first
+        joern_home = os.getenv('JOERN_HOME')
+        if joern_home:
+            joern_home_path = Path(joern_home)
+            if (joern_home_path / "joern").exists():
+                logger.info(f"Found Joern via JOERN_HOME: {joern_home_path}")
+                return joern_home_path
+            elif (joern_home_path / "bin" / "joern").exists():
+                logger.info(f"Found Joern via JOERN_HOME (bin): {joern_home_path}")
+                return joern_home_path
+            else:
+                logger.warning(f"JOERN_HOME points to {joern_home_path} but joern executable not found there")
+        
         current_dir = Path(".")
-        if (current_dir / "joern-cli" / "joern").exists():
-            logger.info(f"Found Joern in current directory: {(current_dir / 'joern-cli').absolute()}")
-            return current_dir / "joern-cli"
+        
+        # Check for various common directory structures
+        joern_search_patterns = [
+            # Standard installations
+            current_dir / "joern-cli" / "joern",
+            current_dir / "joern" / "joern", 
+            current_dir / "joern" / "bin" / "joern",
+            
+            # Tools directory patterns (common in enterprise/CI environments)
+            current_dir / "tools" / "joern",
+            current_dir / "tools" / "joern-cli" / "joern",
+            current_dir / "tools" / "joern" / "bin" / "joern",
+            current_dir / "tools" / "bin" / "joern",
+            
+            # Alternative directory patterns
+            current_dir / "bin" / "joern",
+            current_dir / "external" / "joern" / "joern",
+            current_dir / "vendor" / "joern" / "joern",
+        ]
+        
+        # Check each pattern
+        for joern_exec in joern_search_patterns:
+            if joern_exec.exists() and joern_exec.is_file():
+                joern_root = joern_exec.parent
+                logger.info(f"Found Joern executable: {joern_exec}")
+                logger.info(f"Using Joern root directory: {joern_root}")
+                return joern_root
         
         # Check if joern is in PATH
         joern_executable = shutil.which("joern")
         if joern_executable:
             joern_path = Path(joern_executable).parent.parent  # Go up from bin/joern to joern root
-            logger.info(f"Found Joern in PATH: {joern_path}")
+            logger.info(f"Found Joern in system PATH: {joern_path}")
             return joern_path
         
-        # Common installation paths
-        possible_paths = [
+        # Check system-wide installation paths
+        system_paths = [
             Path.home() / "joern",
             Path("/opt/joern"),
             Path("/usr/local/joern"),
-            Path.cwd() / "joern",
-            Path.cwd() / "joern-cli",
+            Path("/usr/local/bin"),  # For system installations
         ]
         
-        # Check common paths
-        for path in possible_paths:
+        for path in system_paths:
             if (path / "joern").exists() or (path / "bin" / "joern").exists():
-                logger.info(f"Found Joern installation: {path}")
+                logger.info(f"Found Joern in system location: {path}")
                 return path
         
+        # Search recursively in common directories (limited depth to avoid performance issues)
+        search_dirs = [current_dir / "tools", current_dir / "bin", current_dir / "external"]
+        for search_dir in search_dirs:
+            if search_dir.exists():
+                for joern_candidate in search_dir.rglob("joern"):
+                    if joern_candidate.is_file() and joern_candidate.name == "joern":
+                        logger.info(f"Found Joern via recursive search: {joern_candidate}")
+                        return joern_candidate.parent
+        
         logger.warning("Joern installation not found automatically")
+        logger.info("Searched in the following locations:")
+        for pattern in joern_search_patterns:
+            logger.info(f"  - {pattern}")
         logger.info("Possible solutions:")
-        logger.info("  1. Install Joern in current directory as 'joern-cli'")
-        logger.info("  2. Add Joern to PATH")
-        logger.info("  3. Install in common location like ~/joern")
+        logger.info("  1. Install Joern in './joern-cli/' directory")
+        logger.info("  2. Install Joern in './tools/' directory") 
+        logger.info("  3. Add Joern to system PATH")
+        logger.info("  4. Set JOERN_HOME environment variable")
+        logger.info("  5. Disable Joern parsing with --disable-joern")
         return None
     
     def _prepare_chunk_files(self, chunk: Chunk, chunk_dir: Path) -> List[Path]:
