@@ -13,6 +13,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from ..processors.chunked_processor import FileInfo
+from ..core.models import Entity, Relationship, EntityType, RelationType
+import hashlib
 
 
 class ParsedEntity(BaseModel):
@@ -94,7 +96,7 @@ class TreeSitterParser:
             
         logger.info(f"Initialized Tree-sitter parser with {len(self.languages)} languages: {list(self.languages.keys())}")
     
-    def parse_file(self, file_info: FileInfo) -> Tuple[List[ParsedEntity], List[ParsedRelation]]:
+    def parse_file(self, file_info: FileInfo) -> Tuple[List[Entity], List[Relationship]]:
         """Parse a single file and extract entities and relationships.
         
         Args:
@@ -115,16 +117,21 @@ class TreeSitterParser:
             tree = parser.parse(bytes(content, 'utf-8'))
             
             # Extract entities and relationships based on language
+            parsed_entities, parsed_relations = [], []
             if file_info.language == "go":
-                return self._parse_go(tree.root_node, content, str(file_info.path))
+                parsed_entities, parsed_relations = self._parse_go(tree.root_node, content, str(file_info.path))
             elif file_info.language == "java":
-                return self._parse_java(tree.root_node, content, str(file_info.path))
+                parsed_entities, parsed_relations = self._parse_java(tree.root_node, content, str(file_info.path))
             elif file_info.language == "python":
-                return self._parse_python(tree.root_node, content, str(file_info.path))
+                parsed_entities, parsed_relations = self._parse_python(tree.root_node, content, str(file_info.path))
             elif file_info.language in ["javascript", "typescript"]:
-                return self._parse_javascript(tree.root_node, content, str(file_info.path))
-            else:
-                return [], []
+                parsed_entities, parsed_relations = self._parse_javascript(tree.root_node, content, str(file_info.path))
+            
+            # Convert parsed objects to standard models
+            entities = self._convert_to_entities(parsed_entities)
+            relationships = self._convert_to_relationships(parsed_relations)
+            
+            return entities, relationships
                 
         except Exception as e:
             logger.error(f"Failed to parse {file_info.path}: {e}")
@@ -553,3 +560,99 @@ class TreeSitterParser:
             return None
         except:
             return None
+    
+    def _convert_to_entities(self, parsed_entities: List[ParsedEntity]) -> List[Entity]:
+        """Convert ParsedEntity objects to Entity objects."""
+        entities = []
+        for parsed in parsed_entities:
+            # Generate a unique ID for the entity
+            entity_id = self._generate_entity_id(parsed.name, parsed.file_path, parsed.start_line)
+            
+            # Map entity type
+            entity_type = self._map_entity_type(parsed.type)
+            
+            entity = Entity(
+                id=entity_id,
+                name=parsed.name,
+                type=entity_type,
+                file_path=parsed.file_path,
+                line_number=parsed.start_line,
+                end_line_number=parsed.end_line,
+                language=parsed.language,
+                properties=parsed.metadata
+            )
+            entities.append(entity)
+        return entities
+    
+    def _convert_to_relationships(self, parsed_relations: List[ParsedRelation], entity_name_to_id: dict = None) -> List[Relationship]:
+        """Convert ParsedRelation objects to Relationship objects."""
+        relationships = []
+        for parsed in parsed_relations:
+            # Use simple name-based IDs for now (could be improved with better entity tracking)
+            source_id = hashlib.md5(parsed.source.encode()).hexdigest()[:16]
+            target_id = hashlib.md5(parsed.target.encode()).hexdigest()[:16]
+            
+            # Generate relationship ID
+            rel_id = self._generate_relationship_id(source_id, target_id, parsed.relation_type)
+            
+            # Map relation type
+            relation_type = self._map_relation_type(parsed.relation_type)
+            
+            relationship = Relationship(
+                id=rel_id,
+                source_id=source_id,
+                target_id=target_id,
+                relation_type=relation_type,
+                line_number=parsed.metadata.get("line"),
+                properties=parsed.metadata
+            )
+            relationships.append(relationship)
+        return relationships
+    
+    def _generate_entity_id(self, name: str, file_path: str, line: int) -> str:
+        """Generate a unique ID for an entity."""
+        content = f"{name}:{file_path}:{line}"
+        return hashlib.md5(content.encode()).hexdigest()[:16]
+    
+    def _generate_relationship_id(self, source_id: str, target_id: str, relation_type: str) -> str:
+        """Generate a unique ID for a relationship."""
+        content = f"{source_id}:{target_id}:{relation_type}"
+        return hashlib.md5(content.encode()).hexdigest()[:16]
+    
+    def _map_entity_type(self, parsed_type: str) -> EntityType:
+        """Map parsed entity type to EntityType enum."""
+        type_mapping = {
+            "function": EntityType.FUNCTION,
+            "method": EntityType.METHOD,
+            "class": EntityType.CLASS,
+            "struct": EntityType.STRUCT,
+            "interface": EntityType.INTERFACE,
+            "variable": EntityType.VARIABLE,
+            "constant": EntityType.CONSTANT,
+            "type": EntityType.TYPE,
+            "package": EntityType.PACKAGE,
+            "module": EntityType.MODULE,
+            "import": EntityType.IMPORT,
+            "file": EntityType.FILE,
+            "namespace": EntityType.NAMESPACE
+        }
+        return type_mapping.get(parsed_type.lower(), EntityType.FUNCTION)
+    
+    def _map_relation_type(self, parsed_type: str) -> RelationType:
+        """Map parsed relation type to RelationType enum."""
+        type_mapping = {
+            "calls": RelationType.CALLS,
+            "contains": RelationType.CONTAINS,
+            "imports": RelationType.IMPORTS,
+            "extends": RelationType.EXTENDS,
+            "implements": RelationType.IMPLEMENTS,
+            "uses": RelationType.USES,
+            "defines": RelationType.DEFINES,
+            "references": RelationType.REFERENCES,
+            "depends_on": RelationType.DEPENDS_ON,
+            "annotated_by": RelationType.ANNOTATED_BY,
+            "returns": RelationType.RETURNS,
+            "parameter": RelationType.PARAMETER,
+            "field": RelationType.FIELD
+        }
+        return type_mapping.get(parsed_type.lower(), RelationType.REFERENCES)

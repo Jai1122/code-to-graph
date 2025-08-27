@@ -28,6 +28,10 @@ temp/
 *.cache
 *.tmp
 
+# Test repositories (created during development/testing)
+test_go_repo/
+test_*/
+
 # Log files
 logs/
 *.log
@@ -337,12 +341,8 @@ neo4j_backups/
 # Tree-sitter parsers (auto-downloaded)
 tree-sitter-parsers/
 
-# Joern analysis and installation
-joern-cli/
-joern_workspace/
+# Legacy Joern references (removed)
 cpg_output/
-tools/joern/
-tools/joern-src/
 
 # LLM response cache
 llm_cache/

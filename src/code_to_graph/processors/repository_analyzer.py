@@ -8,7 +8,8 @@ from loguru import logger
 from pydantic import BaseModel
 
 from .chunked_processor import ChunkedRepositoryProcessor, Chunk
-from ..parsers.hybrid_parser import HybridParser, HybridEntity, HybridRelation
+from ..parsers.intelligent_parser import IntelligentParserFactory
+from ..core.models import Entity, Relationship
 from ..core.config import settings
 
 
@@ -34,7 +35,6 @@ class RepositoryAnalyzer:
         self,
         repo_path: Path,
         enable_tree_sitter: bool = None,
-        enable_joern: bool = None,
         chunk_size: Optional[int] = None,
         chunk_strategy: Optional[str] = None
     ):
@@ -43,7 +43,6 @@ class RepositoryAnalyzer:
         Args:
             repo_path: Path to repository to analyze
             enable_tree_sitter: Enable Tree-sitter parsing
-            enable_joern: Enable Joern CPG parsing
             chunk_size: Override chunk size
             chunk_strategy: Override chunk strategy
         """
@@ -51,9 +50,8 @@ class RepositoryAnalyzer:
         
         # Initialize components
         self.processor = ChunkedRepositoryProcessor(repo_path)
-        self.parser = HybridParser(
-            enable_tree_sitter=enable_tree_sitter,
-            enable_joern=enable_joern
+        self.parser = IntelligentParserFactory.create_parser(
+            enable_tree_sitter=enable_tree_sitter
         )
         
         # Override settings if provided
@@ -97,7 +95,7 @@ class RepositoryAnalyzer:
             logger.info(f"Processing chunk {i}/{len(chunks)}: {chunk.id}")
             
             try:
-                entities, relations = self.parser.parse_chunk(chunk)
+                entities, relations = self.parser.parse_repository(chunk.path)
                 
                 all_entities.extend(entities)
                 all_relations.extend(relations)
@@ -141,7 +139,7 @@ class RepositoryAnalyzer:
             breakdown[lang] = breakdown.get(lang, 0) + 1
         return breakdown
     
-    def _get_entity_breakdown(self, entities: List[HybridEntity]) -> Dict[str, int]:
+    def _get_entity_breakdown(self, entities: List[Entity]) -> Dict[str, int]:
         """Get breakdown of entities by type."""
         breakdown = {}
         for entity in entities:
@@ -149,7 +147,7 @@ class RepositoryAnalyzer:
             breakdown[entity_type] = breakdown.get(entity_type, 0) + 1
         return breakdown
     
-    def _get_relation_breakdown(self, relations: List[HybridRelation]) -> Dict[str, int]:
+    def _get_relation_breakdown(self, relations: List[Relationship]) -> Dict[str, int]:
         """Get breakdown of relations by type."""
         breakdown = {}
         for relation in relations:

@@ -8,7 +8,7 @@ from loguru import logger
 
 from .csv_exporter import CSVExporter
 from .neo4j_client import Neo4jClient
-from ..parsers.hybrid_parser import HybridEntity, HybridRelation
+from ..core.models import Entity, Relationship
 from ..core.config import settings
 
 
@@ -30,8 +30,8 @@ class GraphImporter:
     
     def import_graph(
         self,
-        entities: List[HybridEntity],
-        relationships: List[HybridRelation],
+        entities: List[Entity],
+        relationships: List[Relationship],
         clear_existing: bool = False,
         create_indexes: bool = True,
         prefix: str = "graph"
@@ -84,8 +84,8 @@ class GraphImporter:
     
     def export_only(
         self,
-        entities: List[HybridEntity],
-        relationships: List[HybridRelation],
+        entities: List[Entity],
+        relationships: List[Relationship],
         prefix: str = "graph"
     ) -> tuple[Path, Path, Path]:
         """Export graph data to CSV files only (no Neo4j import).

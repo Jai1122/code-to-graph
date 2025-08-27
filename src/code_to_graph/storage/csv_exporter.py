@@ -8,7 +8,7 @@ import tempfile
 from loguru import logger
 from pydantic import BaseModel
 
-from ..parsers.hybrid_parser import HybridEntity, HybridRelation
+from ..core.models import Entity, Relationship
 
 
 class CSVExportStats(BaseModel):
@@ -37,8 +37,8 @@ class CSVExporter:
     
     def export(
         self, 
-        entities: List[HybridEntity], 
-        relationships: List[HybridRelation],
+        entities: List[Entity], 
+        relationships: List[Relationship],
         prefix: str = "graph"
     ) -> Tuple[Path, Path]:
         """Export entities and relationships to CSV files.
@@ -66,7 +66,7 @@ class CSVExporter:
         
         return nodes_file, relationships_file
     
-    def _export_nodes(self, entities: List[HybridEntity], output_file: Path) -> None:
+    def _export_nodes(self, entities: List[Entity], output_file: Path) -> None:
         """Export entities as nodes CSV.
         
         Args:
@@ -75,9 +75,9 @@ class CSVExporter:
         """
         with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
             fieldnames = [
-                'id', 'name', 'type', 'start_line', 'end_line', 'file_path', 'language',
-                'full_name', 'signature', 'code', 'confidence_score', 'source_parsers',
-                'ts_parent', 'ts_children', 'joern_id'
+                'id', 'name', 'type', 'line_number', 'end_line_number', 'file_path', 'language',
+                'package', 'signature', 'return_type', 'access_modifier', 'is_static',
+                'properties', 'annotations'
             ]
             
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -87,26 +87,25 @@ class CSVExporter:
                 row = {
                     'id': entity.id,
                     'name': entity.name,
-                    'type': entity.type,
-                    'start_line': entity.start_line,
-                    'end_line': entity.end_line,
-                    'file_path': entity.file_path,
-                    'language': entity.language,
-                    'full_name': entity.full_name or '',
+                    'type': entity.type.value if hasattr(entity.type, 'value') else str(entity.type),
+                    'line_number': entity.line_number or '',
+                    'end_line_number': entity.end_line_number or '',
+                    'file_path': entity.file_path or '',
+                    'language': entity.language or '',
+                    'package': entity.package or '',
                     'signature': entity.signature or '',
-                    'code': (entity.code or '').replace('\n', '\\n').replace('\r', '\\r'),
-                    'confidence_score': entity.confidence_score,
-                    'source_parsers': '|'.join(entity.source_parsers),
-                    'ts_parent': entity.ts_parent or '',
-                    'ts_children': '|'.join(entity.ts_children) if entity.ts_children else '',
-                    'joern_id': entity.joern_id or ''
+                    'return_type': entity.return_type or '',
+                    'access_modifier': entity.access_modifier or '',
+                    'is_static': entity.is_static or False,
+                    'properties': str(entity.properties) if entity.properties else '',
+                    'annotations': '|'.join(entity.annotations) if entity.annotations else '',
                 }
                 
                 writer.writerow(row)
         
         logger.debug(f"Exported {len(entities)} entities to {output_file}")
     
-    def _export_relationships(self, relationships: List[HybridRelation], output_file: Path) -> None:
+    def _export_relationships(self, relationships: List[Relationship], output_file: Path) -> None:
         """Export relationships CSV.
         
         Args:
@@ -115,8 +114,8 @@ class CSVExporter:
         """
         with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
             fieldnames = [
-                'source_id', 'target_id', 'relation_type', 'confidence_score', 
-                'source_parsers', 'line_number', 'joern_edge_type'
+                'id', 'source_id', 'target_id', 'relation_type', 'file_path',
+                'line_number', 'column_number', 'properties'
             ]
             
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -124,13 +123,14 @@ class CSVExporter:
             
             for relationship in relationships:
                 row = {
+                    'id': relationship.id,
                     'source_id': relationship.source_id,
                     'target_id': relationship.target_id,
-                    'relation_type': relationship.relation_type,
-                    'confidence_score': relationship.confidence_score,
-                    'source_parsers': '|'.join(relationship.source_parsers),
+                    'relation_type': relationship.relation_type.value if hasattr(relationship.relation_type, 'value') else str(relationship.relation_type),
+                    'file_path': relationship.file_path or '',
                     'line_number': relationship.line_number or '',
-                    'joern_edge_type': relationship.joern_edge_type or ''
+                    'column_number': relationship.column_number or '',
+                    'properties': str(relationship.properties) if relationship.properties else '',
                 }
                 
                 writer.writerow(row)
@@ -167,18 +167,17 @@ CALL {{
     CALL apoc.create.node([row.type], {{
         id: row.id,
         name: row.name,
-        file_path: row.file_path,
-        language: row.language,
-        start_line: toInteger(row.start_line),
-        end_line: toInteger(row.end_line),
-        full_name: CASE WHEN row.full_name <> '' THEN row.full_name ELSE null END,
+        file_path: CASE WHEN row.file_path <> '' THEN row.file_path ELSE null END,
+        language: CASE WHEN row.language <> '' THEN row.language ELSE null END,
+        line_number: CASE WHEN row.line_number <> '' THEN toInteger(row.line_number) ELSE null END,
+        end_line_number: CASE WHEN row.end_line_number <> '' THEN toInteger(row.end_line_number) ELSE null END,
+        package: CASE WHEN row.package <> '' THEN row.package ELSE null END,
         signature: CASE WHEN row.signature <> '' THEN row.signature ELSE null END,
-        code: CASE WHEN row.code <> '' THEN replace(replace(row.code, '\\\\n', '\\n'), '\\\\r', '\\r') ELSE null END,
-        confidence_score: toFloat(row.confidence_score),
-        source_parsers: CASE WHEN row.source_parsers <> '' THEN split(row.source_parsers, '|') ELSE [] END,
-        ts_parent: CASE WHEN row.ts_parent <> '' THEN row.ts_parent ELSE null END,
-        ts_children: CASE WHEN row.ts_children <> '' THEN split(row.ts_children, '|') ELSE [] END,
-        joern_id: CASE WHEN row.joern_id <> '' THEN row.joern_id ELSE null END
+        return_type: CASE WHEN row.return_type <> '' THEN row.return_type ELSE null END,
+        access_modifier: CASE WHEN row.access_modifier <> '' THEN row.access_modifier ELSE null END,
+        is_static: toBoolean(row.is_static),
+        properties: CASE WHEN row.properties <> '' THEN row.properties ELSE null END,
+        annotations: CASE WHEN row.annotations <> '' THEN split(row.annotations, '|') ELSE [] END
     }}) YIELD node
     RETURN count(*)
 }} IN TRANSACTIONS OF 1000 ROWS;
@@ -190,10 +189,11 @@ CALL {{
     MATCH (source {{id: row.source_id}})
     MATCH (target {{id: row.target_id}})
     CALL apoc.create.relationship(source, row.relation_type, {{
-        confidence_score: toFloat(row.confidence_score),
-        source_parsers: CASE WHEN row.source_parsers <> '' THEN split(row.source_parsers, '|') ELSE [] END,
+        id: row.id,
+        file_path: CASE WHEN row.file_path <> '' THEN row.file_path ELSE null END,
         line_number: CASE WHEN row.line_number <> '' THEN toInteger(row.line_number) ELSE null END,
-        joern_edge_type: CASE WHEN row.joern_edge_type <> '' THEN row.joern_edge_type ELSE null END
+        column_number: CASE WHEN row.column_number <> '' THEN toInteger(row.column_number) ELSE null END,
+        properties: CASE WHEN row.properties <> '' THEN row.properties ELSE null END
     }}, target) YIELD rel
     RETURN count(*)
 }} IN TRANSACTIONS OF 1000 ROWS;
@@ -218,8 +218,8 @@ CREATE FULLTEXT INDEX entity_search IF NOT EXISTS FOR (e:Entity) ON EACH [e.name
     
     def export_with_script(
         self,
-        entities: List[HybridEntity],
-        relationships: List[HybridRelation],
+        entities: List[Entity],
+        relationships: List[Relationship],
         prefix: str = "graph"
     ) -> Tuple[Path, Path, Path]:
         """Export CSV files and create import script.

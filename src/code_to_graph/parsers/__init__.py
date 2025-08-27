@@ -1,7 +1,13 @@
 """Parser modules for code analysis."""
 
-from .hybrid_parser import HybridParser
 from .tree_sitter_parser import TreeSitterParser
-from .joern_parser import JoernParser
+from .go_native_parser import GoNativeParser, GoNativeParserFactory
+from .intelligent_parser import IntelligentParser, IntelligentParserFactory
 
-__all__ = ["HybridParser", "TreeSitterParser", "JoernParser"]
+__all__ = [
+    "TreeSitterParser", 
+    "GoNativeParser", 
+    "GoNativeParserFactory",
+    "IntelligentParser",
+    "IntelligentParserFactory"
+]

@@ -44,8 +44,7 @@ processing:
   
   # Parser settings
   enable_tree_sitter: true
-  enable_joern: true
-  joern_heap_size: "8G"
+  # Joern support has been removed
   
   # Supported languages
   supported_languages:

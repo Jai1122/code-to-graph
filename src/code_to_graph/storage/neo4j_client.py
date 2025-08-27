@@ -251,36 +251,38 @@ class Neo4jClient:
                             'name': entity.name,
                             'file_path': entity.file_path,
                             'language': entity.language,
-                            'start_line': entity.start_line,
-                            'end_line': entity.end_line,
-                            'full_name': entity.full_name,
+                            'line_number': entity.line_number,
+                            'end_line_number': entity.end_line_number,
+                            'package': entity.package,
                             'signature': entity.signature,
-                            'code': entity.code,
-                            'confidence_score': entity.confidence_score,
-                            'source_parsers': [p.value if hasattr(p, 'value') else str(p) for p in entity.source_parsers],
-                            'entity_type': entity.type
+                            'return_type': entity.return_type,
+                            'access_modifier': entity.access_modifier,
+                            'is_static': entity.is_static,
+                            'entity_type': entity.type.value if hasattr(entity.type, 'value') else str(entity.type),
+                            'properties_json': str(entity.properties) if entity.properties else '',
+                            'annotations': entity.annotations or []
                         })
                     
-                    # Create entities
-                    create_query = """
+                    # Create or merge entities
+                    merge_query = """
                     UNWIND $entities AS entity
-                    CREATE (n:Entity {
-                        id: entity.id,
-                        name: entity.name,
-                        file_path: entity.file_path,
-                        language: entity.language,
-                        start_line: entity.start_line,
-                        end_line: entity.end_line,
-                        full_name: entity.full_name,
-                        signature: entity.signature,
-                        code: entity.code,
-                        confidence_score: entity.confidence_score,
-                        source_parsers: entity.source_parsers,
-                        entity_type: entity.entity_type
-                    })
+                    MERGE (n:Entity {id: entity.id})
+                    SET n.name = entity.name,
+                        n.file_path = entity.file_path,
+                        n.language = entity.language,
+                        n.line_number = entity.line_number,
+                        n.end_line_number = entity.end_line_number,
+                        n.package = entity.package,
+                        n.signature = entity.signature,
+                        n.return_type = entity.return_type,
+                        n.access_modifier = entity.access_modifier,
+                        n.is_static = entity.is_static,
+                        n.type = entity.entity_type,
+                        n.properties_json = entity.properties_json,
+                        n.annotations = entity.annotations
                     """
                     
-                    result = session.run(create_query, {'entities': entity_params})
+                    result = session.run(merge_query, {'entities': entity_params})
                     summary = result.consume()
                     total_stats.nodes_created += summary.counters.nodes_created
                     
@@ -294,25 +296,31 @@ class Neo4jClient:
                     rel_params = []
                     for rel in batch:
                         rel_params.append({
+                            'id': rel.id,
                             'source_id': rel.source_id,
                             'target_id': rel.target_id,
-                            'relation_type': rel.relation_type,
-                            'confidence_score': rel.confidence_score,
-                            'source_parsers': [p.value if hasattr(p, 'value') else str(p) for p in rel.source_parsers],
-                            'line_number': rel.line_number
+                            'relation_type': rel.relation_type.value if hasattr(rel.relation_type, 'value') else str(rel.relation_type),
+                            'file_path': rel.file_path,
+                            'line_number': rel.line_number,
+                            'column_number': rel.column_number,
+                            'properties_json': str(rel.properties) if rel.properties else ''
                         })
                     
-                    # Create relationships
+                    # Create or merge relationships
                     rel_query = """
                     UNWIND $relationships AS rel
                     MATCH (source:Entity {id: rel.source_id})
                     MATCH (target:Entity {id: rel.target_id})
-                    CREATE (source)-[r:RELATES {
+                    MERGE (source)-[r:RELATES {
+                        id: rel.id,
                         relation_type: rel.relation_type,
-                        confidence_score: rel.confidence_score,
-                        source_parsers: rel.source_parsers,
-                        line_number: rel.line_number
+                        source_id: rel.source_id,
+                        target_id: rel.target_id
                     }]->(target)
+                    SET r.file_path = rel.file_path,
+                        r.line_number = rel.line_number,
+                        r.column_number = rel.column_number,
+                        r.properties_json = rel.properties_json
                     """
                     
                     result = session.run(rel_query, {'relationships': rel_params})

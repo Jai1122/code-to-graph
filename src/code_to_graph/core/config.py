@@ -63,8 +63,12 @@ class ProcessingSettings(BaseSettings):
     
     # Parsing settings
     enable_tree_sitter: bool = Field(default=True, description="Enable Tree-sitter for fast parsing")
-    enable_joern: bool = Field(default=True, description="Enable Joern CPG for semantic analysis")
-    joern_heap_size: str = Field(default="8G", description="Joern JVM heap size")
+    enable_go_native: bool = Field(default=True, description="Enable Go native parser for superior Go analysis")
+    
+    # Go-specific settings
+    go_binary_path: Optional[str] = Field(default=None, description="Path to Go binary (auto-detected if None)")
+    go_analyzer_timeout: int = Field(default=300, description="Go analyzer timeout in seconds")
+    go_include_code: bool = Field(default=False, description="Include source code in Go analysis results")
     
     # Languages to process
     supported_languages: List[str] = Field(
@@ -74,7 +78,12 @@ class ProcessingSettings(BaseSettings):
     
     # File filtering
     exclude_patterns: List[str] = Field(
-        default=["**/test/**", "**/tests/**", "**/*_test.go", "**/*Test.java", "**/node_modules/**", "**/vendor/**"],
+        default=[
+            "**/test/**", "**/tests/**", "**/*_test.go", "**/*Test.java", 
+            "**/node_modules/**", "**/vendor/**", "**/.git/**",
+            "**/build/**", "**/dist/**", "**/target/**", "**/bin/**",
+            "**/*.pb.go", "**/*_gen.go", "**/*.generated.*"
+        ],
         description="File patterns to exclude from processing"
     )
     
