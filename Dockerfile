@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code and setup files
 COPY src/ ./src/
-COPY config/ ./config/
+# Configuration via environment variables only
 COPY setup.py ./
 COPY README.md ./
 

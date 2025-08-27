@@ -86,12 +86,8 @@ else
     echo "⚠️  .env file already exists"
 fi
 
-if [ ! -f "config/settings.yaml" ]; then
-    cp config/settings.example.yaml config/settings.yaml
-    echo "✅ Created settings.yaml file - please customize it"
-else
-    echo "⚠️  settings.yaml file already exists"
-fi
+# Configuration is handled via .env file only
+echo "✅ Configuration uses .env file (no YAML config needed)"
 
 # Test the installation
 echo "🧪 Testing installation..."
@@ -102,7 +98,7 @@ echo ""
 echo "🎉 Setup completed successfully!"
 echo ""
 echo "Next steps:"
-echo "1. Customize .env and config/settings.yaml files"
+echo "1. Customize .env file with your settings"
 echo "2. Start Neo4j: docker-compose up -d neo4j"
 echo "3. Activate environment: source .venv/bin/activate"
 echo "4. Test with: code-to-graph status"

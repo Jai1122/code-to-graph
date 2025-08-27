@@ -78,8 +78,7 @@ setup(
     include_package_data=True,
     package_data={
         "code_to_graph": [
-            "config/*.yaml",
-            "config/*.example",
+            # Configuration handled via .env files
         ],
     },
     zip_safe=False,

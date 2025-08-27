@@ -10,8 +10,8 @@
 api_keys/
 credentials/
 secrets/
-config/secrets.yml
-config/production.yml
+# Legacy config references (removed)
+# config/ directory no longer used
 
 # Database files and dumps
 *.db
