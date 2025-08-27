@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 import os
 
-from ..core.models import Entity, Relationship
+from ..core.models import Entity, Relationship, RelationType
 from ..core.config import settings
 from .base_parser import BaseParser
 
@@ -253,25 +253,42 @@ class GoNativeParser(BaseParser):
     
     def _create_entity_from_data(self, data: Dict[str, Any]) -> Entity:
         """Create an Entity object from analyzer output data."""
+        # Map Go analyzer entity types to our EntityType enum
+        from ..core.models import EntityType
+        
+        entity_type_mapping = {
+            "function": EntityType.FUNCTION,
+            "method": EntityType.METHOD,
+            "struct": EntityType.STRUCT,
+            "interface": EntityType.INTERFACE,
+            "variable": EntityType.VARIABLE,
+            "constant": EntityType.CONSTANT,
+            "type": EntityType.TYPE,
+            "package": EntityType.PACKAGE,
+            "field": EntityType.VARIABLE
+        }
+        
+        raw_type = data.get("type", "function")
+        mapped_type = entity_type_mapping.get(raw_type, EntityType.FUNCTION)
+        
         return Entity(
             id=data.get("id", ""),
             name=data.get("name", ""),
-            type=data.get("type", ""),
+            type=mapped_type,
             file_path=data.get("file", ""),
+            line_number=data.get("start_line", 0),
+            end_line_number=data.get("end_line", 0),
             language="go",
             package=data.get("package", ""),
-            start_line=data.get("start_line", 0),
-            end_line=data.get("end_line", 0),
-            code=data.get("code", ""),
-            doc_string=data.get("doc_string", ""),
             signature=data.get("signature", ""),
             return_type=data.get("return_type", ""),
-            parameters=data.get("metadata", {}).get("parameters", ""),
-            metadata={
+            properties={
                 "receiver_type": data.get("receiver_type", ""),
                 "interfaces": ",".join(data.get("interfaces", [])),
                 "fields": ",".join(data.get("fields", [])),
                 "methods": ",".join(data.get("methods", [])),
+                "doc_string": data.get("doc_string", ""),
+                "code": data.get("code", ""),
                 "visibility": data.get("metadata", {}).get("visibility", ""),
                 "kind": data.get("metadata", {}).get("kind", ""),
                 **data.get("metadata", {})
@@ -280,15 +297,32 @@ class GoNativeParser(BaseParser):
     
     def _create_relationship_from_data(self, data: Dict[str, Any]) -> Relationship:
         """Create a Relationship object from analyzer output data."""
+        # Map Go analyzer relation types to our RelationType enum
+        relation_type_mapping = {
+            "defines_method": RelationType.DEFINES_METHOD,
+            "calls": RelationType.CALLS,
+            "contains": RelationType.CONTAINS,
+            "imports": RelationType.IMPORTS,
+            "extends": RelationType.EXTENDS,
+            "implements": RelationType.IMPLEMENTS,
+            "uses": RelationType.USES,
+            "defines": RelationType.DEFINES,
+            "references": RelationType.REFERENCES,
+            "depends_on": RelationType.DEPENDS_ON
+        }
+        
+        raw_relation_type = data.get("type", "references")
+        mapped_relation_type = relation_type_mapping.get(raw_relation_type, RelationType.REFERENCES)
+        
         return Relationship(
             id=data.get("id", ""),
-            source_entity_id=data.get("source_id", ""),
-            target_entity_id=data.get("target_id", ""),
-            source_entity_name=data.get("source_name", ""),
-            target_entity_name=data.get("target_name", ""),
-            relation_type=data.get("type", ""),
+            source_id=data.get("source_id", ""),
+            target_id=data.get("target_id", ""),
+            relation_type=mapped_relation_type,
+            file_path=data.get("file", ""),
             line_number=data.get("line", 0),
-            metadata=data.get("metadata", {})
+            column_number=data.get("column", 0),
+            properties=data.get("metadata", {})
         )
     
     def get_supported_languages(self) -> List[str]:

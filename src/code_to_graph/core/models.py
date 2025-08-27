@@ -39,6 +39,7 @@ class RelationType(str, Enum):
     RETURNS = "returns"
     PARAMETER = "parameter"
     FIELD = "field"
+    DEFINES_METHOD = "defines_method"
 
 
 class Entity(BaseModel):
