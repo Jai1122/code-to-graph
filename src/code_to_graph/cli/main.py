@@ -228,7 +228,7 @@ def visualize(host: str, port: int, debug_mode: bool) -> None:
         console.print(f"🚀 Server starting... Open [bold blue]http://{host}:{port}[/bold blue] in your browser")
         console.print("💡 Press [bold]Ctrl+C[/bold] to stop the server")
         
-        server.run()
+        server.run(threaded=False)
         
     except KeyboardInterrupt:
         console.print("\n👋 Visualization server stopped")
