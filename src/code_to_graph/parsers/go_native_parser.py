@@ -94,7 +94,7 @@ class GoNativeParser(BaseParser):
             
             # Build binary
             result = subprocess.run(
-                [self.go_binary, "build", "-o", "go-analyzer", "main.go"],
+                [self.go_binary, "build", "-o", "go-analyzer", "."],
                 check=True,
                 capture_output=True,
                 text=True
