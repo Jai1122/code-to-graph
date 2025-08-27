@@ -15,16 +15,21 @@ from ..storage.neo4j_client import Neo4jClient
 class DashVisualizationServer:
     """Interactive web-based visualization server using Dash."""
     
-    def __init__(self, neo4j_client: Optional[Neo4jClient] = None, debug: bool = False):
+    def __init__(self, neo4j_client: Optional[Neo4jClient] = None, debug: bool = False, 
+                 host: str = "127.0.0.1", port: int = 8080):
         """Initialize the Dash visualization server.
         
         Args:
             neo4j_client: Neo4j client instance
             debug: Enable debug mode
+            host: Server host address
+            port: Server port number
         """
         self.neo4j_client = neo4j_client or Neo4jClient()
         self.visualizer = GraphVisualizer(self.neo4j_client)
         self.debug = debug
+        self.host = host
+        self.port = port
         
         # Initialize Dash app
         self.app = dash.Dash(__name__, title="CodeToGraph Visualizer")
@@ -262,23 +267,21 @@ class DashVisualizationServer:
                 html.P(f"Error: {str(e)}", style={'color': '#7f8c8d'})
             ])
     
-    def run(self, host: str = "localhost", port: int = 8080, threaded: bool = True):
+    def run(self, threaded: bool = True):
         """Start the visualization server.
         
         Args:
-            host: Host address to bind to
-            port: Port number to listen on
             threaded: Whether to run in threaded mode
         """
-        logger.info(f"Starting CodeToGraph visualization server at http://{host}:{port}")
+        logger.info(f"Starting CodeToGraph visualization server at http://{self.host}:{self.port}")
         
         try:
             if threaded:
                 # Run in a separate thread
                 server_thread = threading.Thread(
                     target=lambda: self.app.run(
-                        host=host, 
-                        port=port, 
+                        host=self.host, 
+                        port=self.port, 
                         debug=self.debug
                     )
                 )
@@ -287,7 +290,7 @@ class DashVisualizationServer:
                 return server_thread
             else:
                 # Run in main thread
-                self.app.run(host=host, port=port, debug=self.debug)
+                self.app.run(host=self.host, port=self.port, debug=self.debug)
                 
         except Exception as e:
             logger.error(f"Failed to start visualization server: {e}")
