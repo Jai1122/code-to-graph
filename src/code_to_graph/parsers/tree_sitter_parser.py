@@ -630,11 +630,15 @@ class TreeSitterParser:
                 logger.debug(f"Extracted names: source='{source_name}', target='{target_name}'")
                 logger.debug(f"Found source_id: {source_id}, target_id: {target_id}")
             
-            # Fallback to simple name-based IDs if not found in mapping
+            # Fallback: create external entities if not found in mapping
             if not source_id:
-                source_id = hashlib.md5(parsed.source.encode()).hexdigest()[:16]
+                # For missing source entities, create external entity ID
+                source_id = self._generate_entity_id(source_name, "external", 0)
+                logger.debug(f"Created external source entity ID for '{source_name}': {source_id}")
             if not target_id:
-                target_id = hashlib.md5(parsed.target.encode()).hexdigest()[:16]
+                # For missing target entities, create external entity ID  
+                target_id = self._generate_entity_id(target_name, "external", 0)
+                logger.debug(f"Created external target entity ID for '{target_name}': {target_id}")
             
             # Generate relationship ID (include line number for uniqueness)
             line_number = parsed.metadata.get("line", 0)
