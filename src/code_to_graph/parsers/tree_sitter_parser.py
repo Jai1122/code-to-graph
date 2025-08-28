@@ -636,8 +636,9 @@ class TreeSitterParser:
             if not target_id:
                 target_id = hashlib.md5(parsed.target.encode()).hexdigest()[:16]
             
-            # Generate relationship ID
-            rel_id = self._generate_relationship_id(source_id, target_id, parsed.relation_type)
+            # Generate relationship ID (include line number for uniqueness)
+            line_number = parsed.metadata.get("line", 0)
+            rel_id = self._generate_relationship_id(source_id, target_id, parsed.relation_type, line_number)
             
             # Map relation type
             relation_type = self._map_relation_type(parsed.relation_type)
@@ -658,9 +659,9 @@ class TreeSitterParser:
         content = f"{name}:{file_path}:{line}"
         return hashlib.md5(content.encode()).hexdigest()[:16]
     
-    def _generate_relationship_id(self, source_id: str, target_id: str, relation_type: str) -> str:
+    def _generate_relationship_id(self, source_id: str, target_id: str, relation_type: str, line_number: int = 0) -> str:
         """Generate a unique ID for a relationship."""
-        content = f"{source_id}:{target_id}:{relation_type}"
+        content = f"{source_id}:{target_id}:{relation_type}:{line_number}"
         return hashlib.md5(content.encode()).hexdigest()[:16]
     
     def _map_entity_type(self, parsed_type: str) -> EntityType:

@@ -114,6 +114,56 @@ docker logs neo4j-codebase
 - Open http://localhost:7474
 - Login: neo4j / password123
 
+## 🔍 Viewing Relationships in Neo4j
+
+After importing your repository, use these Cypher queries in the Neo4j Browser to explore relationships:
+
+### View All Nodes and Relationships (Graph View)
+```cypher
+MATCH (n:Entity)-[r:RELATES]->(m:Entity) 
+RETURN n, r, m
+```
+
+### View Relationships in Table Format
+```cypher
+MATCH (source:Entity)-[r:RELATES]->(target:Entity) 
+RETURN source.name as Source, 
+       r.relation_type as RelationType, 
+       target.name as Target, 
+       r.line_number as LineNumber
+ORDER BY r.line_number
+```
+
+### Find Specific Function Calls
+```cypher
+MATCH (source:Entity)-[r:RELATES]->(target:Entity) 
+WHERE r.relation_type = "calls"
+RETURN source.name, target.name, r.line_number
+ORDER BY source.name
+```
+
+### View Only Connected Nodes
+```cypher
+MATCH (n:Entity) 
+WHERE (n)-[]->() OR ()-[]->(n) 
+RETURN n
+```
+
+### Count Relationships by Type
+```cypher
+MATCH ()-[r:RELATES]->() 
+RETURN r.relation_type, count(*) as count 
+ORDER BY count DESC
+```
+
+### Find External Dependencies
+```cypher
+MATCH (n:Entity) 
+WHERE n.file_path = "external"
+RETURN n.name as ExternalFunction, count(*) as UsageCount
+ORDER BY UsageCount DESC
+```
+
 ## 🏃‍♂️ Quick Start
 
 ### 1. Check System Status
@@ -270,6 +320,39 @@ export PROCESSING_MAX_MEMORY_GB=8
 # Clear database and retry
 NEO4J_PASSWORD=password123 code-to-graph import-graph \
   --repo-path ./project --clear-db --create-indexes
+```
+
+**5. Relationships Not Visible in Neo4j**
+
+If you see nodes but no relationships in Neo4j Browser:
+
+```bash
+# Check if relationships exist in database
+# In Neo4j Browser, run:
+MATCH ()-[r]->() RETURN count(r) as total_relationships
+```
+
+If count is 0, the issue is during import:
+```bash
+# Run fresh analysis with debug logging
+NEO4J_PASSWORD=password123 LOG_LEVEL=DEBUG code-to-graph import-graph \
+  --repo-path ./your-project --clear-db --create-indexes
+```
+
+If count > 0, but relationships aren't visible, use the correct queries:
+- ❌ Wrong: `MATCH (n) RETURN n` (only shows nodes)
+- ✅ Correct: `MATCH (n:Entity)-[r:RELATES]->(m:Entity) RETURN n, r, m`
+
+**6. Duplicate or Missing Relationships**
+
+Check for relationship count discrepancies:
+```bash
+# Verify analysis vs import counts match
+# Look for logs like:
+# "Starting graph import: X entities, Y relationships"
+# "Database stats: X nodes, Z relationships"
+# 
+# If Y ≠ Z, there may be duplicate relationship IDs
 ```
 
 ### Debug Mode
