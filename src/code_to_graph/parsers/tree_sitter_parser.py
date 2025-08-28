@@ -252,6 +252,25 @@ class TreeSitterParser:
             # Extract function calls for relationships
             called_func = self._extract_go_call_target(node, content)
             if called_func and parent_entity:
+                # Create entity for external function if it doesn't exist
+                called_func_id = f"{file_path}:{called_func}"
+                
+                # Check if this external function entity already exists
+                external_entity_exists = any(e.name == called_func for e in entities)
+                if not external_entity_exists:
+                    # Create external function entity
+                    external_entity = ParsedEntity(
+                        name=called_func,
+                        type="function",
+                        start_line=node.start_point[0] + 1,
+                        end_line=node.end_point[0] + 1,
+                        file_path="external",  # Mark as external
+                        language="go",
+                        parent=None,
+                        metadata={"external": True, "called_from": file_path}
+                    )
+                    entities.append(external_entity)
+                
                 relation = ParsedRelation(
                     source=parent_entity,
                     target=called_func,

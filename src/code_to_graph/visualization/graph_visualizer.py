@@ -69,10 +69,10 @@ class GraphVisualizer:
             # Get node IDs for relationship filtering
             node_ids = nodes_df['id'].tolist()
             
-            # Fetch relationships between these nodes
+            # Fetch relationships from these nodes (including to external entities)
             rel_query = f"""
             MATCH (source:Entity)-[r:RELATES]->(target:Entity)
-            WHERE source.id IN {node_ids} AND target.id IN {node_ids}
+            WHERE source.id IN {node_ids}
             RETURN source.id as source, target.id as target, r.relation_type as relation,
                    1.0 as confidence, r.line_number as line_number
             LIMIT {limit}
@@ -80,6 +80,26 @@ class GraphVisualizer:
             
             rel_result = self.neo4j_client.execute_query(rel_query)
             rel_df = pd.DataFrame([dict(record) for record in rel_result])
+            
+            # If we have relationships, fetch target entities that aren't in our original node set
+            if not rel_df.empty:
+                target_ids = rel_df['target'].unique()
+                missing_target_ids = [tid for tid in target_ids if tid not in node_ids]
+                
+                if missing_target_ids:
+                    target_query = f"""
+                    MATCH (n:Entity) 
+                    WHERE n.id IN {missing_target_ids}
+                    RETURN n.id as id, n.name as name, n.type as type, 
+                           n.file_path as file_path, 1.0 as confidence
+                    """
+                    
+                    target_result = self.neo4j_client.execute_query(target_query)
+                    target_df = pd.DataFrame([dict(record) for record in target_result])
+                    
+                    # Combine original nodes with target entities
+                    if not target_df.empty:
+                        nodes_df = pd.concat([nodes_df, target_df], ignore_index=True)
             
             logger.info(f"Fetched {len(nodes_df)} nodes and {len(rel_df)} relationships")
             return nodes_df, rel_df
