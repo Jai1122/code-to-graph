@@ -248,14 +248,28 @@ class IntelligentParser:
             relationships = []
             
             # Parse each discovered file
-            for file_info in files:
+            for i, file_info in enumerate(files, 1):
                 try:
+                    logger.info(f"📄 [{i}/{len(files)}] Parsing file: {file_info.path.relative_to(repo_path)} ({file_info.language})")
                     file_entities, file_relationships = parser.parse_file(file_info)
+                    
+                    logger.info(f"   └─ Found {len(file_entities)} entities, {len(file_relationships)} relationships")
+                    
+                    # Log entities found in this file
+                    if file_entities:
+                        logger.debug(f"   └─ Entities: {[f'{e.name}({e.type})' for e in file_entities]}")
+                    
+                    # Log relationships found in this file
+                    if file_relationships:
+                        logger.debug(f"   └─ Relationships: {[f'{r.source_id}→{r.target_id}({r.relation_type})' for r in file_relationships]}")
+                    
                     entities.extend(file_entities)
                     relationships.extend(file_relationships)
                     
                 except Exception as e:
-                    logger.warning(f"Failed to parse file {file_info.path}: {e}")
+                    logger.error(f"❌ [{i}/{len(files)}] Failed to parse file {file_info.path}: {e}")
+                    import traceback
+                    logger.debug(f"   └─ Error details: {traceback.format_exc()}")
             
             return entities, relationships
         

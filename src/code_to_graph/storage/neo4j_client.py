@@ -223,6 +223,19 @@ class Neo4jClient:
         
         logger.info(f"Starting bulk entity import: {len(entities)} entities, {len(relationships)} relationships")
         
+        # Log entity types breakdown
+        entity_types = {}
+        for entity in entities:
+            entity_types[entity.type] = entity_types.get(entity.type, 0) + 1
+        logger.info(f"📊 Entity types: {dict(sorted(entity_types.items()))}")
+        
+        # Log relationship types breakdown  
+        rel_types = {}
+        for rel in relationships:
+            rel_type = rel.relation_type.value if hasattr(rel.relation_type, 'value') else str(rel.relation_type)
+            rel_types[rel_type] = rel_types.get(rel_type, 0) + 1
+        logger.info(f"🔗 Relationship types: {dict(sorted(rel_types.items()))}")
+        
         try:
             with self.driver.session(database=database) as session:
                 
@@ -287,6 +300,10 @@ class Neo4jClient:
                     total_stats.nodes_created += summary.counters.nodes_created
                     
                     logger.info(f"Imported batch {i//batch_size + 1}: {summary.counters.nodes_created} nodes")
+                    
+                    # Log details of entities in this batch (for debugging)
+                    if len(batch) <= 20:  # Only for small batches to avoid spam
+                        logger.debug(f"   └─ Entities: {[f'{e.name}({e.type})@{e.file_path}' for e in batch]}")
                 
                 # Import relationships in batches
                 for i in range(0, len(relationships), batch_size):
@@ -328,6 +345,14 @@ class Neo4jClient:
                     total_stats.relationships_created += summary.counters.relationships_created
                     
                     logger.info(f"Imported batch {i//batch_size + 1}: {summary.counters.relationships_created} relationships")
+                    
+                    # Log details of relationships in this batch (for debugging)
+                    if len(batch) <= 20:  # Only for small batches to avoid spam
+                        rel_details = []
+                        for r in batch:
+                            rel_type = r.relation_type.value if hasattr(r.relation_type, 'value') else str(r.relation_type)
+                            rel_details.append(f"{r.source_id}→{r.target_id}({rel_type})@{r.file_path}")
+                        logger.debug(f"   └─ Relationships: {rel_details}")
                 
                 total_stats.execution_time = time.time() - start_time
                 logger.info(f"Bulk import completed in {total_stats.execution_time:.2f}s")
