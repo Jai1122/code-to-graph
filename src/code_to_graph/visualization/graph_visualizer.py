@@ -47,15 +47,15 @@ class GraphVisualizer:
                 nodes_query = f"""
                 MATCH (n:Entity) 
                 WHERE n.name CONTAINS '{filter_query}' OR n.file_path CONTAINS '{filter_query}'
-                RETURN n.id as id, n.name as name, n.entity_type as type, 
-                       n.file_path as file_path, n.confidence_score as confidence
+                RETURN n.id as id, n.name as name, n.type as type, 
+                       n.file_path as file_path, 1.0 as confidence
                 LIMIT {limit}
                 """
             else:
                 nodes_query = f"""
                 MATCH (n:Entity) 
-                RETURN n.id as id, n.name as name, n.entity_type as type, 
-                       n.file_path as file_path, n.confidence_score as confidence
+                RETURN n.id as id, n.name as name, n.type as type, 
+                       n.file_path as file_path, 1.0 as confidence
                 LIMIT {limit}
                 """
             
@@ -74,7 +74,7 @@ class GraphVisualizer:
             MATCH (source:Entity)-[r:RELATES]->(target:Entity)
             WHERE source.id IN {node_ids} AND target.id IN {node_ids}
             RETURN source.id as source, target.id as target, r.relation_type as relation,
-                   r.confidence_score as confidence, r.line_number as line_number
+                   1.0 as confidence, r.line_number as line_number
             LIMIT {limit}
             """
             
@@ -186,7 +186,7 @@ class GraphVisualizer:
             node_type = node_data.get('type', 'unknown')
             node_name = node_data.get('name', node_id)
             file_path = node_data.get('file_path', '')
-            confidence = node_data.get('confidence', 1.0)
+            confidence = node_data.get('confidence', 1.0) or 1.0  # Ensure not None
             
             # Shorten file path for display
             short_path = file_path.split('/')[-1] if file_path else ''

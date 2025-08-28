@@ -129,7 +129,10 @@ class TreeSitterParser:
             
             # Convert parsed objects to standard models
             entities = self._convert_to_entities(parsed_entities)
-            relationships = self._convert_to_relationships(parsed_relations)
+            
+            # Create name-to-ID mapping for relationship resolution
+            entity_name_to_id = {entity.name: entity.id for entity in entities}
+            relationships = self._convert_to_relationships(parsed_relations, entity_name_to_id)
             
             return entities, relationships
                 
@@ -587,10 +590,32 @@ class TreeSitterParser:
     def _convert_to_relationships(self, parsed_relations: List[ParsedRelation], entity_name_to_id: dict = None) -> List[Relationship]:
         """Convert ParsedRelation objects to Relationship objects."""
         relationships = []
+        entity_name_to_id = entity_name_to_id or {}
+        
         for parsed in parsed_relations:
-            # Use simple name-based IDs for now (could be improved with better entity tracking)
-            source_id = hashlib.md5(parsed.source.encode()).hexdigest()[:16]
-            target_id = hashlib.md5(parsed.target.encode()).hexdigest()[:16]
+            # Debug logging to understand the ID matching issue
+            if len(relationships) < 3:  # Only log first few for debugging
+                logger.debug(f"Relationship debug: source='{parsed.source}', target='{parsed.target}'")
+                logger.debug(f"Available entity names: {list(entity_name_to_id.keys())[:10]}")
+            
+            # Extract entity names from full source/target paths (e.g., "file.go:GetUsers" -> "GetUsers")
+            source_name = parsed.source.split(":")[-1] if ":" in parsed.source else parsed.source
+            target_name = parsed.target.split(":")[-1] if ":" in parsed.target else parsed.target
+            
+            # Try to resolve entity IDs from the entity mapping first
+            source_id = entity_name_to_id.get(source_name)
+            target_id = entity_name_to_id.get(target_name)
+            
+            # Debug logging with extracted names
+            if len(relationships) < 3:  # Only log first few for debugging
+                logger.debug(f"Extracted names: source='{source_name}', target='{target_name}'")
+                logger.debug(f"Found source_id: {source_id}, target_id: {target_id}")
+            
+            # Fallback to simple name-based IDs if not found in mapping
+            if not source_id:
+                source_id = hashlib.md5(parsed.source.encode()).hexdigest()[:16]
+            if not target_id:
+                target_id = hashlib.md5(parsed.target.encode()).hexdigest()[:16]
             
             # Generate relationship ID
             rel_id = self._generate_relationship_id(source_id, target_id, parsed.relation_type)

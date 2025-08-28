@@ -410,5 +410,221 @@ def _display_analysis_results(entities: list, relationships: list, duration: flo
     console.print(table)
 
 
+@main.command()
+@click.argument('question', type=str)
+@click.option('--limit', '-l', default=10, help='Maximum number of results to return')
+def query(question: str, limit: int) -> None:
+    """Ask natural language questions about the codebase (requires LLM)."""
+    
+    console.print(f"🤔 Processing question: [bold]{question}[/bold]")
+    
+    try:
+        # Check Neo4j connection
+        with console.status("🔗 Connecting to Neo4j..."):
+            neo4j_client = Neo4jClient()
+            stats = neo4j_client.get_database_stats()
+            
+            if stats['total_nodes'] == 0:
+                console.print("⚠️  [yellow]Warning: No data found in Neo4j. Run 'import-graph' first.[/yellow]")
+                return
+        
+        # Initialize LLM client (optional - fallback to pattern matching)
+        llm_client = None
+        try:
+            with console.status("🧠 Connecting to LLM..."):
+                llm_client = VLLMClient()
+                if not llm_client.check_health():
+                    llm_client = None
+        except Exception:
+            pass
+        
+        if not llm_client:
+            console.print("⚠️  [yellow]LLM server not available. Using pattern-based query translation.[/yellow]")
+        
+        # Convert natural language to Cypher
+        with console.status("🔄 Converting question to Cypher query..."):
+            cypher_query = _generate_cypher_from_question(question, llm_client, limit)
+        
+        console.print(f"\n🔍 [bold]Generated Cypher Query:[/bold]")
+        console.print(f"[cyan]{cypher_query}[/cyan]")
+        
+        # Execute query
+        with console.status("⚡ Executing query..."):
+            results = neo4j_client.execute_query(cypher_query)
+        
+        # Display results
+        if not results:
+            console.print("\n📭 [yellow]No results found.[/yellow]")
+            return
+        
+        console.print(f"\n📊 [bold]Results ({len(results)} found):[/bold]")
+        
+        # Create results table
+        if results:
+            # Get column headers from first result
+            headers = list(results[0].keys())
+            table = Table(show_header=True, header_style="bold blue")
+            
+            for header in headers:
+                table.add_column(header)
+            
+            # Add rows
+            for result in results[:limit]:
+                row = []
+                for header in headers:
+                    value = result.get(header, '')
+                    # Truncate long strings
+                    if isinstance(value, str) and len(value) > 50:
+                        value = value[:47] + "..."
+                    row.append(str(value))
+                table.add_row(*row)
+            
+            console.print(table)
+            
+            if len(results) > limit:
+                console.print(f"\n[dim]... and {len(results) - limit} more results (use --limit to see more)[/dim]")
+        
+    except Exception as e:
+        console.print(f"❌ [red]Query failed: {e}[/red]")
+        logger.error(f"Natural language query failed: {e}")
+        raise click.ClickException(str(e))
+
+
+def _generate_cypher_from_question(question: str, llm_client, limit: int = 10) -> str:
+    """Generate a Cypher query from a natural language question using LLM or pattern matching."""
+    
+    # If LLM is not available, use pattern-based matching
+    if not llm_client:
+        return _pattern_based_query_generation(question, limit)
+    
+    # Schema information for the LLM
+    schema_info = """
+    Neo4j Graph Schema:
+    - Nodes: Entity (with properties: id, name, type, file_path, language, line_number, package, signature, etc.)
+    - Relationships: RELATES (with property: relation_type like "calls", "contains", "imports", etc.)
+    
+    Common entity types: function, method, class, struct, interface, variable, constant, type, package
+    Common relationship types: calls, contains, imports, extends, implements, uses, defines, references
+    
+    Examples:
+    - "What functions are in the main package?" -> MATCH (n:Entity {type: 'function', package: 'main'}) RETURN n.name, n.file_path
+    - "What does the GetUsers function call?" -> MATCH (source:Entity {name: 'GetUsers'})-[r:RELATES {relation_type: 'calls'}]->(target:Entity) RETURN target.name, target.type
+    - "Show all functions in main.go" -> MATCH (n:Entity) WHERE n.file_path CONTAINS 'main.go' AND n.type = 'function' RETURN n.name, n.signature
+    """
+    
+    prompt = f"""
+    {schema_info}
+    
+    Convert this natural language question into a Cypher query for Neo4j:
+    Question: "{question}"
+    
+    Requirements:
+    1. Return a single, valid Cypher query
+    2. Limit results to {limit} unless the question asks for all
+    3. Use appropriate WHERE clauses for filtering
+    4. Return relevant properties like name, type, file_path, signature
+    5. Only use the schema elements described above
+    
+    Cypher query:
+    """
+    
+    try:
+        response = llm_client.generate_sync(prompt, max_tokens=200, temperature=0.1)
+        cypher_query = response.response.strip()
+        
+        # Clean up the response - extract just the Cypher query
+        if "```" in cypher_query:
+            # Extract from code blocks
+            parts = cypher_query.split("```")
+            for part in parts:
+                if "MATCH" in part or "RETURN" in part:
+                    cypher_query = part.strip()
+                    break
+        
+        # Remove any prefixes
+        if cypher_query.startswith("cypher"):
+            cypher_query = cypher_query[6:].strip()
+        if cypher_query.startswith("sql"):
+            cypher_query = cypher_query[3:].strip()
+        
+        # Basic validation
+        if not any(keyword in cypher_query.upper() for keyword in ["MATCH", "RETURN"]):
+            raise ValueError("Generated query does not contain required Cypher keywords")
+        
+        return cypher_query
+        
+    except Exception as e:
+        logger.error(f"Failed to generate Cypher query with LLM: {e}")
+        # Fallback to pattern-based matching
+        return _pattern_based_query_generation(question, limit)
+
+
+def _pattern_based_query_generation(question: str, limit: int = 10) -> str:
+    """Generate Cypher queries using pattern matching for common questions."""
+    
+    question_lower = question.lower()
+    
+    # Pattern 1: Functions in a specific file
+    if "function" in question_lower and ("main.go" in question_lower or ".go" in question_lower):
+        if "main.go" in question_lower:
+            return f"MATCH (n:Entity) WHERE n.file_path CONTAINS 'main.go' AND n.type = 'function' RETURN n.name, n.signature, n.line_number ORDER BY n.line_number LIMIT {limit}"
+        else:
+            # Extract filename
+            words = question.split()
+            go_files = [w for w in words if w.endswith('.go')]
+            if go_files:
+                filename = go_files[0]
+                return f"MATCH (n:Entity) WHERE n.file_path CONTAINS '{filename}' AND n.type = 'function' RETURN n.name, n.signature, n.line_number ORDER BY n.line_number LIMIT {limit}"
+    
+    # Pattern 2: What does X function call?
+    if ("what" in question_lower and "call" in question_lower) or ("calls" in question_lower):
+        # Extract function name (look for capitalized words, excluding "What")
+        words = question.split()
+        function_names = [w for w in words if w[0].isupper() and len(w) > 1 and w.lower() not in ['what', 'does', 'function']]
+        if function_names:
+            func_name = function_names[0]
+            return f"MATCH (source:Entity {{name: '{func_name}'}})-[r:RELATES]->(target:Entity) WHERE r.relation_type = 'calls' RETURN target.name, target.type, target.file_path LIMIT {limit}"
+    
+    # Pattern 3: What calls X function?
+    if "what calls" in question_lower or "who calls" in question_lower:
+        words = question.split()
+        function_names = [w for w in words if w[0].isupper() and len(w) > 1]
+        if function_names:
+            func_name = function_names[0]
+            return f"MATCH (source:Entity)-[r:RELATES]->(target:Entity {{name: '{func_name}'}}) WHERE r.relation_type = 'calls' RETURN source.name, source.type, source.file_path LIMIT {limit}"
+    
+    # Pattern 4: Functions in package
+    if "function" in question_lower and "package" in question_lower:
+        words = question.split()
+        if "main" in words:
+            return f"MATCH (n:Entity) WHERE n.type = 'function' AND (n.package = 'main' OR n.file_path CONTAINS 'main') RETURN n.name, n.signature, n.file_path LIMIT {limit}"
+    
+    # Pattern 5: All functions/methods/types
+    if "all function" in question_lower or "list function" in question_lower or "show function" in question_lower:
+        return f"MATCH (n:Entity {{type: 'function'}}) RETURN n.name, n.file_path, n.signature ORDER BY n.name LIMIT {limit}"
+    
+    if "all method" in question_lower or "list method" in question_lower or "show method" in question_lower:
+        return f"MATCH (n:Entity {{type: 'method'}}) RETURN n.name, n.file_path, n.signature ORDER BY n.name LIMIT {limit}"
+    
+    if "struct" in question_lower or "type" in question_lower:
+        return f"MATCH (n:Entity) WHERE n.type IN ['struct', 'type', 'interface'] RETURN n.name, n.type, n.file_path ORDER BY n.name LIMIT {limit}"
+    
+    # Pattern 6: General search - look for any capitalized words as potential entity names
+    words = question.split()
+    entity_candidates = [w for w in words if w[0].isupper() and len(w) > 1]
+    if entity_candidates:
+        entity_name = entity_candidates[0]
+        return f"MATCH (n:Entity) WHERE n.name CONTAINS '{entity_name}' RETURN n.name, n.type, n.file_path, n.signature LIMIT {limit}"
+    
+    # Default fallback: search for any keyword in entity names
+    search_terms = [w for w in question.split() if len(w) > 3 and w.lower() not in ['what', 'where', 'how', 'does', 'function', 'method', 'class']]
+    if search_terms:
+        search_term = search_terms[0]
+        return f"MATCH (n:Entity) WHERE toLower(n.name) CONTAINS toLower('{search_term}') RETURN n.name, n.type, n.file_path LIMIT {limit}"
+    
+    # Ultimate fallback
+    return f"MATCH (n:Entity) RETURN n.name, n.type, n.file_path ORDER BY n.name LIMIT {limit}"
+
+
 if __name__ == '__main__':
     main()
