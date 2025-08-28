@@ -1,0 +1,235 @@
+# CodeToGraph Configuration
+# Exclude patterns for directories and files from ingestion and visualization
+
+exclusions:
+  # Directories to exclude (supports wildcards)
+  directories:
+    # Version control
+    - ".git"
+    - ".svn"
+    - ".hg"
+    
+    # Dependencies and packages
+    - "node_modules"
+    - ".venv"
+    - "venv"
+    - "env"
+    - "__pycache__"
+    - ".pytest_cache"
+    - "vendor"
+    - "target"
+    - "build"
+    - "dist"
+    - "out"
+    - "bin"
+    - "pkg"
+    
+    # IDE and editor files
+    - ".vscode"
+    - ".idea"
+    - ".eclipse"
+    - ".settings"
+    
+    # OS generated files
+    - ".DS_Store"
+    - "Thumbs.db"
+    
+    # Temporary and cache directories
+    - "tmp"
+    - "temp"
+    - ".cache"
+    - ".npm"
+    - ".gradle"
+    - ".m2"
+    
+    # Documentation and assets (optional - uncomment if needed)
+    # - "docs"
+    # - "documentation" 
+    # - "assets"
+    # - "images"
+    # - "static"
+
+  # File patterns to exclude (supports wildcards)
+  file_patterns:
+    # Test files
+    - "*_test.go"
+    - "*_test.java"
+    - "test_*.py"
+    - "*.test.js"
+    - "*.spec.js"
+    - "*.test.ts"
+    - "*.spec.ts"
+    
+    # Generated files
+    - "*.pb.go"        # Protocol buffer generated files
+    - "*.proto"        # Protocol buffer definitions
+    - "*.generated.*"
+    - "*_generated.*"
+    - "*.gen.*"
+    - "*_gen.*"
+    - "*.pb.*"
+    
+    # Build and compiled files
+    - "*.o"
+    - "*.so"
+    - "*.dll"
+    - "*.exe"
+    - "*.class"
+    - "*.jar"
+    - "*.war"
+    - "*.pyc"
+    - "*.pyo"
+    - "*.pyd"
+    - "*.whl"
+    
+    # Configuration and data files (often not relevant for code analysis)
+    - "*.json"         # Uncomment if you want to exclude JSON configs
+    - "*.yaml"
+    - "*.yml"
+    - "*.xml"
+    - "*.ini"
+    - "*.conf"
+    - "*.cfg"
+    - "*.properties"
+    
+    # Documentation files
+    - "*.md"
+    - "*.txt"
+    - "*.rst"
+    - "*.adoc"
+    
+    # Lock files
+    - "package-lock.json"
+    - "yarn.lock" 
+    - "Pipfile.lock"
+    - "poetry.lock"
+    - "Gemfile.lock"
+    - "composer.lock"
+    
+    # Log files
+    - "*.log"
+    - "*.logs"
+    
+    # Database files
+    - "*.db"
+    - "*.sqlite"
+    - "*.sqlite3"
+    
+    # Backup files
+    - "*.bak"
+    - "*.backup"
+    - "*~"
+    - "*.swp"
+    - "*.swo"
+    
+    # Media files
+    - "*.png"
+    - "*.jpg"
+    - "*.jpeg"
+    - "*.gif"
+    - "*.svg"
+    - "*.ico"
+    - "*.webp"
+    - "*.mp4"
+    - "*.mp3"
+    - "*.wav"
+    - "*.avi"
+    
+    # Font files
+    - "*.ttf"
+    - "*.otf"
+    - "*.woff"
+    - "*.woff2"
+    
+    # Certificate files
+    - "*.pem"
+    - "*.crt"
+    - "*.key"
+    - "*.p12"
+    - "*.pfx"
+
+# Language-specific exclusions
+language_exclusions:
+  go:
+    directories:
+      - "vendor"
+      - "testdata"
+    file_patterns:
+      - "*_test.go"
+      - "*.pb.go"
+      - "mock_*.go"
+      
+  java:
+    directories:
+      - "target"
+      - ".gradle"
+      - "build"
+    file_patterns:
+      - "*Test.java"
+      - "*Tests.java"
+      - "*.class"
+      
+  python:
+    directories:
+      - "__pycache__"
+      - ".pytest_cache"
+      - ".tox"
+      - "venv"
+      - ".venv"
+    file_patterns:
+      - "test_*.py"
+      - "*_test.py"
+      - "*.pyc"
+      - "conftest.py"
+      
+  javascript:
+    directories:
+      - "node_modules"
+      - "coverage"
+      - ".nyc_output"
+    file_patterns:
+      - "*.test.js"
+      - "*.spec.js"
+      - "*.min.js"
+      
+  typescript:
+    directories:
+      - "node_modules"
+      - "dist"
+      - "build"
+    file_patterns:
+      - "*.test.ts"
+      - "*.spec.ts"
+      - "*.d.ts"       # Type definition files
+
+# Visualization-specific exclusions
+visualization:
+  # Hide external/library entities from main graph view
+  hide_external_entities: false
+  
+  # Maximum number of entities to show in graph
+  max_entities: 1000
+  
+  # Maximum number of relationships to show
+  max_relationships: 2000
+  
+  # File paths to exclude from visualization (even if analyzed)
+  exclude_file_paths:
+    - "external"      # Our external function entities
+    - "vendor/*"
+    - "node_modules/*"
+    - ".venv/*"
+
+# Analysis settings
+analysis:
+  # Include test files in analysis (but may exclude from visualization)
+  include_tests: false
+  
+  # Include generated files
+  include_generated: false
+  
+  # Include external dependencies
+  include_external: true
+  
+  # Maximum file size to process (in MB)
+  max_file_size_mb: 10
