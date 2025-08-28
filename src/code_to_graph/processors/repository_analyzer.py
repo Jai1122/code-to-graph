@@ -36,7 +36,8 @@ class RepositoryAnalyzer:
         repo_path: Path,
         enable_tree_sitter: bool = None,
         chunk_size: Optional[int] = None,
-        chunk_strategy: Optional[str] = None
+        chunk_strategy: Optional[str] = None,
+        exclusion_patterns: Optional[List[str]] = None
     ):
         """Initialize the repository analyzer.
         
@@ -45,11 +46,12 @@ class RepositoryAnalyzer:
             enable_tree_sitter: Enable Tree-sitter parsing
             chunk_size: Override chunk size
             chunk_strategy: Override chunk strategy
+            exclusion_patterns: Custom exclusion patterns
         """
         self.repo_path = repo_path
         
         # Initialize components
-        self.processor = ChunkedRepositoryProcessor(repo_path)
+        self.processor = ChunkedRepositoryProcessor(repo_path, exclusion_patterns=exclusion_patterns)
         self.parser = IntelligentParserFactory.create_parser(
             enable_tree_sitter=enable_tree_sitter
         )

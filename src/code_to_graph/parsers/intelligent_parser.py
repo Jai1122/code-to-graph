@@ -215,7 +215,7 @@ class IntelligentParser:
     
     def _parse_with_chunk_parser(self, parser, repo_path: Path, **kwargs) -> Tuple[List[Entity], List[Relationship]]:
         """
-        Parse repository using chunk-based parser (Tree-sitter).
+        Parse repository using chunk-based parser (Tree-sitter) with proper exclusions.
         
         Args:
             parser: Parser instance
@@ -225,30 +225,37 @@ class IntelligentParser:
         Returns:
             Tuple of (entities, relationships)
         """
+        from ..processors.repository_analyzer import RepositoryAnalyzer
+        
         if isinstance(parser, TreeSitterParser):
+            # Extract exclusion patterns from kwargs
+            exclude_patterns = kwargs.get('exclude_patterns', [])
+            
+            # Use RepositoryAnalyzer for proper file discovery with exclusions
+            analyzer = RepositoryAnalyzer(
+                repo_path, 
+                enable_tree_sitter=True,
+                exclusion_patterns=exclude_patterns
+            )
+            
+            # Get discovered files through the proper exclusion pipeline
+            processor = analyzer.processor
+            files = processor.discover_files(force_refresh=True)
+            
+            logger.info(f"Discovered {len(files)} files for Tree-sitter parsing after exclusions")
+            
             entities = []
             relationships = []
             
-            # Find source files
-            extensions = ['.go', '.java', '.py', '.js', '.ts', '.cpp', '.c', '.cs']
-            for ext in extensions:
-                files = list(repo_path.rglob(f"*{ext}"))
-                for file_path in files:
-                    try:
-                        # Create a simple file info object
-                        file_info = type('FileInfo', (), {
-                            'path': file_path,
-                            'language': self._get_language_from_extension(ext),
-                            'size': file_path.stat().st_size,
-                            'modified': file_path.stat().st_mtime
-                        })()
-                        
-                        file_entities, file_relationships = parser.parse_file(file_info)
-                        entities.extend(file_entities)
-                        relationships.extend(file_relationships)
-                        
-                    except Exception as e:
-                        logger.warning(f"Failed to parse file {file_path}: {e}")
+            # Parse each discovered file
+            for file_info in files:
+                try:
+                    file_entities, file_relationships = parser.parse_file(file_info)
+                    entities.extend(file_entities)
+                    relationships.extend(file_relationships)
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to parse file {file_info.path}: {e}")
             
             return entities, relationships
         

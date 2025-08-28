@@ -80,16 +80,20 @@ class Chunk(BaseModel):
 class ChunkedRepositoryProcessor:
     """Processes repositories in memory-efficient chunks."""
     
-    def __init__(self, repo_path: Path, cache_dir: Optional[Path] = None):
+    def __init__(self, repo_path: Path, cache_dir: Optional[Path] = None, exclusion_patterns: Optional[List[str]] = None):
         """Initialize the chunked processor.
         
         Args:
             repo_path: Path to the repository to process
             cache_dir: Directory for caching analysis results
+            exclusion_patterns: Custom exclusion patterns to use instead of settings
         """
         self.repo_path = repo_path
         self.cache_dir = cache_dir or settings.cache_dir
         self.cache_file = self.cache_dir / f"{repo_path.name}_file_info.json"
+        
+        # Use custom exclusions if provided, otherwise fall back to settings
+        self.exclusion_patterns = exclusion_patterns or list(settings.processing.exclude_patterns)
         
         # Create cache directory
         self.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -98,7 +102,7 @@ class ChunkedRepositoryProcessor:
         self._file_info_cache: Dict[str, FileInfo] = {}
         self._load_file_cache()
         
-        logger.info(f"Initialized chunked processor for {repo_path}")
+        logger.info(f"Initialized chunked processor for {repo_path} with {len(self.exclusion_patterns)} exclusion patterns")
     
     def discover_files(self, force_refresh: bool = False) -> List[FileInfo]:
         """Discover all source files in the repository.
@@ -285,11 +289,25 @@ class ChunkedRepositoryProcessor:
         relative_path = file_path.relative_to(self.repo_path)
         path_str = str(relative_path)
         
-        for pattern in settings.processing.exclude_patterns:
-            if Path(path_str).match(pattern.replace('**/', '*/')):
-                return True
+        for pattern in self.exclusion_patterns:
+            # Handle ** patterns properly - they should match at any depth including root
+            if pattern.startswith('**/'):
+                # Try both with and without the **/ prefix for root-level matching
+                pattern_without_prefix = pattern[3:]  # Remove '**/''
+                if (self._match_pattern(path_str, pattern) or 
+                    self._match_pattern(path_str, pattern_without_prefix)):
+                    return True
+            else:
+                if self._match_pattern(path_str, pattern):
+                    return True
         
         return False
+    
+    def _match_pattern(self, path_str: str, pattern: str) -> bool:
+        """Match a single pattern against a path string."""
+        import fnmatch
+        # Use fnmatch as primary method since it handles ** patterns better
+        return fnmatch.fnmatch(path_str, pattern)
     
     def _load_file_cache(self) -> None:
         """Load file information cache."""
