@@ -20,3 +20,6 @@ numpy>=1.25.2
 
 # HTTP client for OLLAMA integration
 httpx>=0.25.2
+
+# YAML configuration support
+PyYAML>=6.0

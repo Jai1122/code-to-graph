@@ -12,6 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 
 from ..core.config import settings
 from ..core.logger import setup_logging
+from ..core.config_loader import get_config_loader
 from ..parsers.intelligent_parser import IntelligentParserFactory
 from ..storage.neo4j_client import Neo4jClient
 from ..storage.graph_importer import GraphImporter
@@ -56,7 +57,7 @@ def analyze(repo_path: Path, language: str, exclude_dirs: tuple, exclude_pattern
     console.print(f"📝 Primary language: [bold]{language}[/bold]")
     
     # Configure exclusions
-    exclusions = _configure_exclusions(exclude_dirs, exclude_patterns, include_tests)
+    exclusions = _configure_exclusions(exclude_dirs, exclude_patterns, include_tests, language)
     
     try:
         # Initialize parser
@@ -117,7 +118,7 @@ def import_graph(repo_path: Path, language: str, exclude_dirs: tuple, exclude_pa
     console.print(f"📝 Primary language: [bold]{language}[/bold]")
     
     # Configure exclusions
-    exclusions = _configure_exclusions(exclude_dirs, exclude_patterns, include_tests)
+    exclusions = _configure_exclusions(exclude_dirs, exclude_patterns, include_tests, language)
     
     try:
         # Test Neo4j connection
@@ -341,30 +342,45 @@ def status() -> None:
     console.print(f"  • Tree-sitter: {'Enabled' if settings.processing.enable_tree_sitter else 'Disabled'}")
 
 
-def _configure_exclusions(exclude_dirs: tuple, exclude_patterns: tuple, include_tests: bool) -> List[str]:
+def _configure_exclusions(exclude_dirs: tuple, exclude_patterns: tuple, include_tests: bool, language: str = "go") -> List[str]:
     """Configure file and directory exclusions."""
-    exclusions = list(settings.processing.exclude_patterns)
+    config_loader = get_config_loader()
     
-    # Add custom exclusions
+    # Start with YAML-based exclusions if available
+    if config_loader.is_loaded:
+        logger.info(f"Using exclusions from config file: {config_loader.config_file_path}")
+        exclusions = config_loader.get_all_exclusion_patterns(language)
+        
+        # Override test inclusion from config if specified
+        if config_loader.should_include_tests():
+            include_tests = True
+            
+        # Log configuration source
+        logger.info(f"Loaded {len(exclusions)} exclusion patterns from config.yaml")
+    else:
+        # Fallback to hardcoded exclusions
+        logger.info("Using hardcoded exclusions (no config.yaml found)")
+        exclusions = list(settings.processing.exclude_patterns)
+        
+        # Add common exclusions
+        default_exclusions = [
+            "**/vendor/**",      # Go vendor directory
+            "**/node_modules/**", # Node.js modules
+            "**/.git/**",        # Git directory
+            "**/build/**",       # Build outputs
+            "**/dist/**",        # Distribution files
+            "**/*.pb.go",        # Protocol buffer generated files
+            "**/*_gen.go",       # Generated Go files
+        ]
+        exclusions.extend(default_exclusions)
+    
+    # Add custom CLI-provided exclusions
     for dir_name in exclude_dirs:
         exclusions.append(f"**/{dir_name}/**")
     
     exclusions.extend(exclude_patterns)
     
-    # Add common exclusions
-    default_exclusions = [
-        "**/vendor/**",      # Go vendor directory
-        "**/node_modules/**", # Node.js modules
-        "**/.git/**",        # Git directory
-        "**/build/**",       # Build outputs
-        "**/dist/**",        # Distribution files
-        "**/*.pb.go",        # Protocol buffer generated files
-        "**/*_gen.go",       # Generated Go files
-    ]
-    
-    exclusions.extend(default_exclusions)
-    
-    # Handle test files
+    # Handle test files (only if not overridden by config)
     if not include_tests:
         test_exclusions = [
             "**/*_test.go",
@@ -376,7 +392,11 @@ def _configure_exclusions(exclude_dirs: tuple, exclude_patterns: tuple, include_
         ]
         exclusions.extend(test_exclusions)
     
-    return list(set(exclusions))  # Remove duplicates
+    # Remove duplicates and log final count
+    final_exclusions = list(set(exclusions))
+    logger.info(f"Final exclusion count: {len(final_exclusions)} patterns")
+    
+    return final_exclusions
 
 
 def _display_analysis_results(entities: list, relationships: list, duration: float) -> None:

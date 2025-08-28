@@ -9,6 +9,7 @@ from loguru import logger
 import math
 
 from ..storage.neo4j_client import Neo4jClient
+from ..core.config_loader import get_config_loader
 
 
 class GraphVisualizer:
@@ -21,6 +22,7 @@ class GraphVisualizer:
             neo4j_client: Neo4j client instance (creates new one if not provided)
         """
         self.neo4j_client = neo4j_client or Neo4jClient()
+        self.config_loader = get_config_loader()
         self.color_map = {
             'function': '#1f77b4',  # Blue
             'method': '#ff7f0e',    # Orange  
@@ -35,29 +37,54 @@ class GraphVisualizer:
         """Fetch nodes and relationships from Neo4j.
         
         Args:
-            limit: Maximum number of relationships to fetch
+            limit: Maximum number of relationships to fetch (overridden by config if available)
             filter_query: Optional filter for entity names
             
         Returns:
             Tuple of (nodes_df, relationships_df)
         """
+        # Apply config-based limits if available
+        if self.config_loader.is_loaded:
+            limit = min(limit, self.config_loader.get_max_entities())
+            max_relationships = self.config_loader.get_max_relationships()
+        else:
+            max_relationships = limit * 2  # Default relationship limit
         try:
-            # Fetch nodes
+            # Build exclusion conditions based on config
+            exclusion_conditions = []
+            
+            if self.config_loader.is_loaded:
+                viz_settings = self.config_loader.get_visualization_settings()
+                exclude_paths = viz_settings.get('exclude_file_paths', [])
+                
+                # Hide external entities if configured
+                if self.config_loader.should_hide_external_entities():
+                    exclude_paths.append('external')
+                
+                # Build WHERE clause for exclusions
+                for exclude_path in exclude_paths:
+                    if '*' in exclude_path:
+                        exclusion_conditions.append(f"NOT n.file_path =~ '.*{exclude_path.replace('*', '.*')}.*'")
+                    else:
+                        exclusion_conditions.append(f"NOT n.file_path CONTAINS '{exclude_path}'")
+            
+            # Build the base WHERE clause
+            base_conditions = []
             if filter_query:
-                nodes_query = f"""
-                MATCH (n:Entity) 
-                WHERE n.name CONTAINS '{filter_query}' OR n.file_path CONTAINS '{filter_query}'
-                RETURN n.id as id, n.name as name, n.type as type, 
-                       n.file_path as file_path, 1.0 as confidence
-                LIMIT {limit}
-                """
-            else:
-                nodes_query = f"""
-                MATCH (n:Entity) 
-                RETURN n.id as id, n.name as name, n.type as type, 
-                       n.file_path as file_path, 1.0 as confidence
-                LIMIT {limit}
-                """
+                base_conditions.append(f"(n.name CONTAINS '{filter_query}' OR n.file_path CONTAINS '{filter_query}')")
+            
+            # Combine all conditions
+            all_conditions = base_conditions + exclusion_conditions
+            where_clause = "WHERE " + " AND ".join(all_conditions) if all_conditions else ""
+            
+            # Fetch nodes
+            nodes_query = f"""
+            MATCH (n:Entity) 
+            {where_clause}
+            RETURN n.id as id, n.name as name, n.type as type, 
+                   n.file_path as file_path, 1.0 as confidence
+            LIMIT {limit}
+            """
             
             nodes_result = self.neo4j_client.execute_query(nodes_query)
             nodes_df = pd.DataFrame([dict(record) for record in nodes_result])
@@ -75,7 +102,7 @@ class GraphVisualizer:
             WHERE source.id IN {node_ids}
             RETURN source.id as source, target.id as target, r.relation_type as relation,
                    1.0 as confidence, r.line_number as line_number
-            LIMIT {limit}
+            LIMIT {max_relationships}
             """
             
             rel_result = self.neo4j_client.execute_query(rel_query)
@@ -87,9 +114,15 @@ class GraphVisualizer:
                 missing_target_ids = [tid for tid in target_ids if tid not in node_ids]
                 
                 if missing_target_ids:
+                    # Apply same exclusion conditions to target entities
+                    target_exclusions = " AND ".join(exclusion_conditions) if exclusion_conditions else ""
+                    target_where = f"WHERE n.id IN {missing_target_ids}"
+                    if target_exclusions:
+                        target_where += f" AND {target_exclusions}"
+                    
                     target_query = f"""
                     MATCH (n:Entity) 
-                    WHERE n.id IN {missing_target_ids}
+                    {target_where}
                     RETURN n.id as id, n.name as name, n.type as type, 
                            n.file_path as file_path, 1.0 as confidence
                     """
