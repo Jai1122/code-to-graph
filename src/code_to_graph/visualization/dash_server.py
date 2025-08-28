@@ -100,6 +100,7 @@ class DashVisualizationServer:
                 dcc.Tab(label='🕸️ Network Graph', value='graph-tab'),
                 dcc.Tab(label='📊 Statistics', value='stats-tab'),
                 dcc.Tab(label='🗂️ File Explorer', value='files-tab'),
+                dcc.Tab(label='🤔 Ask Questions', value='query-tab'),
             ], style={'marginBottom': 20}),
             
             # Content area
@@ -135,6 +136,8 @@ class DashVisualizationServer:
                 return self._render_stats_tab()
             elif active_tab == 'files-tab':
                 return self._render_files_tab(search_filter, limit)
+            elif active_tab == 'query-tab':
+                return self._render_query_tab()
             return html.Div("Select a tab to view content")
         
         @self.app.callback(
@@ -147,6 +150,87 @@ class DashVisualizationServer:
             """Update status bar with current query info."""
             filter_text = f" | Filter: '{search_filter}'" if search_filter else ""
             return f"📊 Limit: {limit} entities{filter_text} | Last updated: {time.strftime('%H:%M:%S')}"
+        
+        # Callback for natural language queries (button click or Enter key)
+        @self.app.callback(
+            Output('query-results', 'children'),
+            [Input('ask-button', 'n_clicks'), Input('question-input', 'n_submit')],
+            [State('question-input', 'value'), State('query-limit-dropdown', 'value')],
+            prevent_initial_call=True
+        )
+        def process_query(n_clicks, question, limit):
+            """Process natural language queries and display results."""
+            if not n_clicks or not question:
+                return html.Div([
+                    html.H4("💡 Ready to Answer Your Questions", style={'textAlign': 'center', 'color': '#7f8c8d'}),
+                    html.P("Type a question above and click 'Ask' to get started!", style={'textAlign': 'center', 'color': '#bdc3c7'})
+                ], style={'padding': '40px', 'textAlign': 'center'})
+            
+            try:
+                # Generate Cypher query from natural language
+                cypher_query = self._generate_cypher_from_question(question, limit)
+                
+                # Execute the query
+                results = self.neo4j_client.execute_query(cypher_query)
+                
+                if not results:
+                    return html.Div([
+                        html.H4("🔍 Question Processed", style={'color': '#2c3e50'}),
+                        html.P(f"Question: {question}", style={'fontStyle': 'italic', 'color': '#7f8c8d'}),
+                        html.Hr(),
+                        html.H5("Generated Cypher Query:", style={'color': '#34495e', 'marginTop': 20}),
+                        html.Pre(cypher_query, style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'fontSize': '12px'}),
+                        html.Hr(),
+                        html.H5("📭 No Results Found", style={'color': '#e67e22'}),
+                        html.P("Try rephrasing your question or check if the entities exist in your codebase.", style={'color': '#7f8c8d'})
+                    ], style={'padding': '20px', 'backgroundColor': '#ffffff', 'borderRadius': '10px', 'border': '1px solid #ddd'})
+                
+                # Create results table
+                headers = list(results[0].keys()) if results else []
+                
+                results_content = [
+                    html.H4("🔍 Question Processed", style={'color': '#2c3e50'}),
+                    html.P(f"Question: {question}", style={'fontStyle': 'italic', 'color': '#7f8c8d'}),
+                    html.Hr(),
+                    html.H5("Generated Cypher Query:", style={'color': '#34495e', 'marginTop': 20}),
+                    html.Pre(cypher_query, style={'backgroundColor': '#ecf0f1', 'padding': '10px', 'borderRadius': '5px', 'fontSize': '12px'}),
+                    html.Hr(),
+                    html.H5(f"📊 Results ({len(results)} found):", style={'color': '#27ae60', 'marginTop': 20}),
+                ]
+                
+                if results:
+                    # Create a table for results
+                    table_header = html.Tr([html.Th(header, style={'padding': '10px', 'backgroundColor': '#3498db', 'color': 'white'}) for header in headers])
+                    
+                    table_rows = []
+                    for result in results:
+                        row = []
+                        for header in headers:
+                            value = result.get(header, '')
+                            # Truncate long strings for display
+                            if isinstance(value, str) and len(value) > 100:
+                                value = value[:97] + "..."
+                            row.append(html.Td(str(value), style={'padding': '8px', 'borderBottom': '1px solid #ddd'}))
+                        table_rows.append(html.Tr(row))
+                    
+                    results_table = html.Table([
+                        html.Thead(table_header),
+                        html.Tbody(table_rows)
+                    ], style={'width': '100%', 'borderCollapse': 'collapse', 'marginTop': '10px'})
+                    
+                    results_content.append(results_table)
+                
+                return html.Div(results_content, style={'padding': '20px', 'backgroundColor': '#ffffff', 'borderRadius': '10px', 'border': '1px solid #ddd'})
+                
+            except Exception as e:
+                logger.error(f"Query processing failed: {e}")
+                return html.Div([
+                    html.H4("❌ Query Failed", style={'color': '#e74c3c'}),
+                    html.P(f"Question: {question}", style={'fontStyle': 'italic', 'color': '#7f8c8d'}),
+                    html.Hr(),
+                    html.P(f"Error: {str(e)}", style={'color': '#e74c3c', 'backgroundColor': '#fadbd8', 'padding': '10px', 'borderRadius': '5px'}),
+                    html.P("Please try rephrasing your question or check the system logs for more details.", style={'color': '#7f8c8d'})
+                ], style={'padding': '20px', 'backgroundColor': '#ffffff', 'borderRadius': '10px', 'border': '1px solid #ddd'})
     
     def _render_graph_tab(self, search_filter: str = "", limit: int = 100, layout: str = "spring") -> html.Div:
         """Render the network graph tab."""
@@ -295,6 +379,138 @@ class DashVisualizationServer:
         except Exception as e:
             logger.error(f"Failed to start visualization server: {e}")
             raise
+    
+    def _render_query_tab(self) -> html.Div:
+        """Render the natural language query tab."""
+        return html.Div([
+            html.Div([
+                html.H3("🤔 Ask Questions About Your Codebase", style={'marginBottom': 20, 'color': '#2c3e50'}),
+                html.P("Ask natural language questions about your code. Examples:", style={'marginBottom': 10}),
+                html.Ul([
+                    html.Li("What functions are in main.go?"),
+                    html.Li("What does the GetUsers function call?"),
+                    html.Li("Show all methods"),
+                    html.Li("What structs are defined?"),
+                    html.Li("What calls the CreateUser method?"),
+                ], style={'marginBottom': 20, 'color': '#7f8c8d'}),
+                
+                html.Div([
+                    html.Label("Your Question:", style={'fontWeight': 'bold', 'marginBottom': 5}),
+                    dcc.Input(
+                        id='question-input',
+                        type='text',
+                        placeholder='e.g., "What functions are in main.go?"',
+                        style={'width': '70%', 'padding': '12px', 'fontSize': '16px', 'marginRight': '10px'},
+                        value=''
+                    ),
+                    html.Button(
+                        '🔍 Ask',
+                        id='ask-button',
+                        n_clicks=0,
+                        style={
+                            'padding': '12px 24px',
+                            'backgroundColor': '#3498db',
+                            'color': 'white',
+                            'border': 'none',
+                            'borderRadius': '5px',
+                            'cursor': 'pointer',
+                            'fontSize': '16px',
+                            'fontWeight': 'bold'
+                        }
+                    ),
+                ], style={'marginBottom': 30}),
+                
+                html.Div([
+                    html.Label("Result Limit:", style={'fontWeight': 'bold', 'marginRight': '10px'}),
+                    dcc.Dropdown(
+                        id='query-limit-dropdown',
+                        options=[
+                            {'label': '5 results', 'value': 5},
+                            {'label': '10 results', 'value': 10},
+                            {'label': '20 results', 'value': 20},
+                            {'label': '50 results', 'value': 50},
+                        ],
+                        value=10,
+                        style={'width': '150px', 'display': 'inline-block'}
+                    ),
+                ], style={'marginBottom': 20}),
+                
+            ], style={'padding': '20px', 'backgroundColor': '#f8f9fa', 'borderRadius': '10px', 'marginBottom': 20}),
+            
+            # Results area
+            html.Div(id='query-results', children=[
+                html.Div([
+                    html.H4("💡 Ready to Answer Your Questions", style={'textAlign': 'center', 'color': '#7f8c8d'}),
+                    html.P("Type a question above and click 'Ask' to get started!", style={'textAlign': 'center', 'color': '#bdc3c7'})
+                ], style={'padding': '40px', 'textAlign': 'center'})
+            ]),
+            
+        ])
+    
+    def _generate_cypher_from_question(self, question: str, limit: int = 10) -> str:
+        """Generate a Cypher query from a natural language question using pattern matching."""
+        question_lower = question.lower()
+        
+        # Pattern 1: Functions in a specific file
+        if "function" in question_lower and ("main.go" in question_lower or ".go" in question_lower):
+            if "main.go" in question_lower:
+                return f"MATCH (n:Entity) WHERE n.file_path CONTAINS 'main.go' AND n.type = 'function' RETURN n.name, n.type, n.line_number ORDER BY n.line_number LIMIT {limit}"
+            else:
+                # Extract filename
+                words = question.split()
+                go_files = [w for w in words if w.endswith('.go')]
+                if go_files:
+                    filename = go_files[0]
+                    return f"MATCH (n:Entity) WHERE n.file_path CONTAINS '{filename}' AND n.type = 'function' RETURN n.name, n.type, n.line_number ORDER BY n.line_number LIMIT {limit}"
+        
+        # Pattern 2: What does X function call?
+        if ("what" in question_lower and "call" in question_lower) or ("calls" in question_lower):
+            # Extract function name (look for capitalized words, excluding "What")
+            words = question.split()
+            function_names = [w for w in words if w[0].isupper() and len(w) > 1 and w.lower() not in ['what', 'does', 'function']]
+            if function_names:
+                func_name = function_names[0]
+                return f"MATCH (source:Entity {{name: '{func_name}'}})-[r:RELATES]->(target:Entity) WHERE r.relation_type = 'calls' RETURN target.name, target.type, target.file_path LIMIT {limit}"
+        
+        # Pattern 3: What calls X function?
+        if "what calls" in question_lower or "who calls" in question_lower:
+            words = question.split()
+            function_names = [w for w in words if w[0].isupper() and len(w) > 1]
+            if function_names:
+                func_name = function_names[0]
+                return f"MATCH (source:Entity)-[r:RELATES]->(target:Entity {{name: '{func_name}'}}) WHERE r.relation_type = 'calls' RETURN source.name, source.type, source.file_path LIMIT {limit}"
+        
+        # Pattern 4: Functions in package
+        if "function" in question_lower and "package" in question_lower:
+            words = question.split()
+            if "main" in words:
+                return f"MATCH (n:Entity) WHERE n.type = 'function' AND (n.package = 'main' OR n.file_path CONTAINS 'main') RETURN n.name, n.type, n.file_path LIMIT {limit}"
+        
+        # Pattern 5: All functions/methods/types
+        if "all function" in question_lower or "list function" in question_lower or "show function" in question_lower:
+            return f"MATCH (n:Entity {{type: 'function'}}) RETURN n.name, n.file_path, n.type ORDER BY n.name LIMIT {limit}"
+        
+        if "all method" in question_lower or "list method" in question_lower or "show method" in question_lower:
+            return f"MATCH (n:Entity {{type: 'method'}}) RETURN n.name, n.file_path, n.type ORDER BY n.name LIMIT {limit}"
+        
+        if "struct" in question_lower or "type" in question_lower:
+            return f"MATCH (n:Entity) WHERE n.type IN ['struct', 'type', 'interface'] RETURN n.name, n.type, n.file_path ORDER BY n.name LIMIT {limit}"
+        
+        # Pattern 6: General search - look for any capitalized words as potential entity names
+        words = question.split()
+        entity_candidates = [w for w in words if w[0].isupper() and len(w) > 1]
+        if entity_candidates:
+            entity_name = entity_candidates[0]
+            return f"MATCH (n:Entity) WHERE n.name CONTAINS '{entity_name}' RETURN n.name, n.type, n.file_path LIMIT {limit}"
+        
+        # Default fallback: search for any keyword in entity names
+        search_terms = [w for w in question.split() if len(w) > 3 and w.lower() not in ['what', 'where', 'how', 'does', 'function', 'method', 'class']]
+        if search_terms:
+            search_term = search_terms[0]
+            return f"MATCH (n:Entity) WHERE toLower(n.name) CONTAINS toLower('{search_term}') RETURN n.name, n.type, n.file_path LIMIT {limit}"
+        
+        # Ultimate fallback
+        return f"MATCH (n:Entity) RETURN n.name, n.type, n.file_path ORDER BY n.name LIMIT {limit}"
     
     def close(self):
         """Close the visualization server and connections."""
