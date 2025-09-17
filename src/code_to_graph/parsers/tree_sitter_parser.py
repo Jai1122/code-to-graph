@@ -42,6 +42,7 @@ class ParsedRelation(BaseModel):
 
 class TreeSitterParser:
     """Fast parsing using Tree-sitter for syntax analysis."""
+    # RELATIONSHIP_FIX_APPLIED - Fix for null target_id issue
     
     def __init__(self):
         """Initialize Tree-sitter parser with language support."""
@@ -130,9 +131,22 @@ class TreeSitterParser:
             # Convert parsed objects to standard models
             entities = self._convert_to_entities(parsed_entities)
             
-            # Create name-to-ID mapping for relationship resolution
-            entity_name_to_id = {entity.name: entity.id for entity in entities}
-            relationships = self._convert_to_relationships(parsed_relations, entity_name_to_id)
+            # Use enhanced relationship mapping for better resolution
+            relationship_data = []
+            for parsed_rel in parsed_relations:
+                relationship_data.append({
+                    'source_name': parsed_rel.source.split(":")[-1] if ":" in parsed_rel.source else parsed_rel.source,
+                    'target_name': parsed_rel.target.split(":")[-1] if ":" in parsed_rel.target else parsed_rel.target,
+                    'relation_type': parsed_rel.relation_type,
+                    'line_number': parsed_rel.metadata.get('line', 0),
+                    'column_number': 0,
+                    'current_package': None  # Could be extracted from file analysis
+                })
+            
+            # Use enhanced relationship creation
+            relationships = self._create_relationships_with_mapping(
+                relationship_data, entities, str(file_info.path)
+            )
             
             return entities, relationships
                 
@@ -606,6 +620,210 @@ class TreeSitterParser:
             entities.append(entity)
         return entities
     
+    def _create_robust_entity_mapping(self, entities: List[Entity]) -> Dict[str, str]:
+        """
+        Create a robust mapping from entity names to IDs with multiple name variants.
+        This fixes the null target_id issue by handling name variations.
+        """
+        name_to_id = {}
+        
+        for entity in entities:
+            # Primary mapping: exact name
+            name_to_id[entity.name] = entity.id
+            
+            # Handle Go-specific name variations
+            if entity.language == "go":
+                # Add package-qualified names
+                if entity.package and entity.package != "main":
+                    qualified_name = f"{entity.package}.{entity.name}"
+                    name_to_id[qualified_name] = entity.id
+                
+                # Add receiver method names (for Go methods)
+                if hasattr(entity, 'properties') and entity.properties:
+                    receiver_type = entity.properties.get('receiver_type')
+                    if receiver_type:
+                        method_name = f"{receiver_type}.{entity.name}"
+                        name_to_id[method_name] = entity.id
+                        # Also add pointer receiver variant
+                        if not receiver_type.startswith('*'):
+                            ptr_method = f"*{receiver_type}.{entity.name}"
+                            name_to_id[ptr_method] = entity.id
+            
+            # Handle case variations
+            name_to_id[entity.name.lower()] = entity.id
+            name_to_id[entity.name.upper()] = entity.id
+            
+            # Add file-scoped names
+            if entity.file_path:
+                file_name = Path(entity.file_path).stem
+                scoped_name = f"{file_name}.{entity.name}"
+                name_to_id[scoped_name] = entity.id
+        
+        return name_to_id
+    
+    def _resolve_entity_name(self, name: str, name_to_id: Dict[str, str], 
+                           current_file: str = None, current_package: str = None) -> Optional[str]:
+        """
+        Resolve entity name to ID with fallback strategies.
+        """
+        # Direct match
+        if name in name_to_id:
+            return name_to_id[name]
+        
+        # Try case-insensitive match
+        name_lower = name.lower()
+        if name_lower in name_to_id:
+            return name_to_id[name_lower]
+        
+        # Try package-qualified name
+        if current_package and current_package != "main":
+            qualified = f"{current_package}.{name}"
+            if qualified in name_to_id:
+                return name_to_id[qualified]
+        
+        # Try file-scoped name
+        if current_file:
+            file_name = Path(current_file).stem
+            scoped = f"{file_name}.{name}"
+            if scoped in name_to_id:
+                return name_to_id[scoped]
+        
+        # Try finding partial matches (for external dependencies)
+        for mapped_name, entity_id in name_to_id.items():
+            if name in mapped_name or mapped_name in name:
+                return entity_id
+        
+        return None
+    
+    def _create_external_entity(self, name: str, entity_type: str = "function", 
+                              current_file: str = None) -> Entity:
+        """
+        Create an entity for external dependencies.
+        """
+        from ..core.models import Entity, EntityType
+        
+        # Map string types to EntityType enum
+        type_mapping = {
+            "function": EntityType.FUNCTION,
+            "method": EntityType.METHOD,
+            "class": EntityType.CLASS,
+            "struct": EntityType.STRUCT,
+            "package": EntityType.PACKAGE,
+            "variable": EntityType.VARIABLE,
+            "constant": EntityType.CONSTANT,
+        }
+        
+        entity_type_enum = type_mapping.get(entity_type, EntityType.FUNCTION)
+        
+        return Entity(
+            id=f"external_{name}_{hash(name) % 10000}",
+            name=name,
+            type=entity_type_enum,
+            file_path="external",
+            language="go",
+            package="external",
+            properties={"external": True, "source_file": current_file}
+        )
+
+    def _create_relationships_with_mapping(self, relationships: List, entities: List[Entity], 
+                                         current_file: str = None) -> List:
+        """
+        Create relationships with enhanced entity name-to-ID mapping.
+        """
+        from ..core.models import Relationship, RelationType
+        import uuid
+        
+        # Create robust entity mapping
+        name_to_id = self._create_robust_entity_mapping(entities)
+        
+        # Track external entities to create
+        external_entities = {}
+        
+        enhanced_relationships = []
+        
+        for rel_data in relationships:
+            source_name = rel_data.get('source_name', '')
+            target_name = rel_data.get('target_name', '')
+            relation_type = rel_data.get('relation_type', 'references')
+            
+            # Resolve source ID
+            source_id = self._resolve_entity_name(
+                source_name, name_to_id, current_file, 
+                rel_data.get('current_package')
+            )
+            
+            # Resolve target ID  
+            target_id = self._resolve_entity_name(
+                target_name, name_to_id, current_file,
+                rel_data.get('current_package')
+            )
+            
+            # Create external entities for unresolved targets
+            if not target_id and target_name:
+                # Check if we already created this external entity
+                if target_name not in external_entities:
+                    external_entity = self._create_external_entity(
+                        target_name, "function", current_file
+                    )
+                    external_entities[target_name] = external_entity
+                    entities.append(external_entity)
+                    name_to_id[target_name] = external_entity.id
+                
+                target_id = external_entities[target_name].id
+            
+            # Create external entities for unresolved sources (less common)
+            if not source_id and source_name:
+                if source_name not in external_entities:
+                    external_entity = self._create_external_entity(
+                        source_name, "function", current_file
+                    )
+                    external_entities[source_name] = external_entity
+                    entities.append(external_entity)
+                    name_to_id[source_name] = external_entity.id
+                
+                source_id = external_entities[source_name].id
+            
+            # Only create relationship if we have both IDs
+            if source_id and target_id:
+                # Map relation type to enum
+                relation_type_mapping = {
+                    "calls": RelationType.CALLS,
+                    "contains": RelationType.CONTAINS,
+                    "imports": RelationType.IMPORTS,
+                    "uses": RelationType.USES,
+                    "references": RelationType.REFERENCES,
+                    "defines": RelationType.DEFINES,
+                    "extends": RelationType.EXTENDS,
+                    "implements": RelationType.IMPLEMENTS,
+                }
+                
+                rel_type_enum = relation_type_mapping.get(relation_type, RelationType.REFERENCES)
+                
+                relationship = Relationship(
+                    id=f"rel_{uuid.uuid4().hex[:8]}",
+                    source_id=source_id,
+                    target_id=target_id,
+                    relation_type=rel_type_enum,
+                    file_path=current_file,
+                    line_number=rel_data.get('line_number', 0),
+                    column_number=rel_data.get('column_number', 0),
+                    properties={
+                        "source_name": source_name,
+                        "target_name": target_name,
+                        "original_relation_type": relation_type
+                    }
+                )
+                
+                enhanced_relationships.append(relationship)
+            else:
+                logger.warning(f"Skipping relationship: {source_name} -> {target_name} "
+                      f"(source_id: {source_id}, target_id: {target_id})")
+        
+        logger.info(f"✅ Created {len(enhanced_relationships)} relationships "
+              f"({len(external_entities)} external entities)")
+        
+        return enhanced_relationships
+
     def _convert_to_relationships(self, parsed_relations: List[ParsedRelation], entity_name_to_id: dict = None) -> List[Relationship]:
         """Convert ParsedRelation objects to Relationship objects."""
         relationships = []

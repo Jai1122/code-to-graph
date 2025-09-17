@@ -263,6 +263,28 @@ class IntelligentParser:
                     if file_relationships:
                         logger.debug(f"   └─ Relationships: {[f'{r.source_id}→{r.target_id}({r.relation_type})' for r in file_relationships]}")
                     
+                    # INTELLIGENT_PARSER_FIX_APPLIED - Enhanced relationship processing
+                    
+                    # Use enhanced relationship mapping if available
+                    if hasattr(parser, '_create_relationships_with_mapping'):
+                        logger.debug(f"Using enhanced relationship mapping for {file_info.path}")
+                        # Convert existing relationships to the expected format
+                        relationship_data = []
+                        for rel in file_relationships:
+                            relationship_data.append({
+                                'source_name': rel.properties.get('source_name', rel.source_id),
+                                'target_name': rel.properties.get('target_name', rel.target_id),
+                                'relation_type': rel.relation_type.value if hasattr(rel.relation_type, 'value') else str(rel.relation_type),
+                                'line_number': rel.line_number or 0,
+                                'column_number': rel.column_number or 0,
+                                'current_package': None
+                            })
+                        
+                        # Re-process relationships with enhanced mapping
+                        file_relationships = parser._create_relationships_with_mapping(
+                            relationship_data, file_entities, str(file_info.path)
+                        )
+                    
                     entities.extend(file_entities)
                     relationships.extend(file_relationships)
                     
