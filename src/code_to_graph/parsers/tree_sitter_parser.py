@@ -167,11 +167,122 @@ class TreeSitterParser:
                 package_name = self._get_node_text(node.children[1], content)
                 break
         
-        # Walk the syntax tree with function context tracking
-        function_context = {}  # Track function boundaries
-        self._walk_go_node_with_context(root, content, file_path, entities, relations, content_lines, function_context)
+        # Walk the syntax tree with SIMPLE relationship creation
+        # First pass: collect all entities
+        self._collect_go_entities(root, content, file_path, entities, content_lines)
+        
+        # Second pass: collect all relationships using entity list
+        self._collect_go_relationships(root, content, file_path, entities, relations)
         
         return entities, relations
+    
+    def _collect_go_entities(self, node: Node, content: str, file_path: str, entities: List[ParsedEntity], content_lines: List[str]) -> None:
+        """Collect all Go entities in first pass."""
+        
+        # Function declarations
+        if node.type == "function_declaration":
+            func_name = None
+            for child in node.children:
+                if child.type == "identifier":
+                    func_name = self._get_node_text(child, content)
+                    break
+            
+            if func_name:
+                entity = ParsedEntity(
+                    name=func_name,
+                    type="function",
+                    start_line=node.start_point[0] + 1,
+                    end_line=node.end_point[0] + 1,
+                    file_path=file_path,
+                    language="go",
+                    metadata={"signature": self._extract_go_function_signature(node, content)}
+                )
+                entities.append(entity)
+                from loguru import logger
+                logger.debug(f"🏗️  Collected function: {func_name} (lines {entity.start_line}-{entity.end_line})")
+        
+        # Method declarations
+        elif node.type == "method_declaration":
+            method_name = None
+            receiver_type = None
+            
+            for child in node.children:
+                if child.type == "field_identifier":
+                    method_name = self._get_node_text(child, content)
+                elif child.type == "parameter_list" and not method_name:
+                    receiver_type = self._extract_go_receiver_type(child, content)
+            
+            if method_name:
+                entity = ParsedEntity(
+                    name=method_name,
+                    type="method",
+                    start_line=node.start_point[0] + 1,
+                    end_line=node.end_point[0] + 1,
+                    file_path=file_path,
+                    language="go",
+                    metadata={
+                        "receiver_type": receiver_type,
+                        "signature": self._extract_go_function_signature(node, content)
+                    }
+                )
+                entities.append(entity)
+                from loguru import logger
+                logger.debug(f"🏗️  Collected method: {method_name} (lines {entity.start_line}-{entity.end_line})")
+        
+        # Recursively collect from children
+        for child in node.children:
+            self._collect_go_entities(child, content, file_path, entities, content_lines)
+    
+    def _collect_go_relationships(self, node: Node, content: str, file_path: str, entities: List[ParsedEntity], relations: List[ParsedRelation]) -> None:
+        """Collect all Go relationships in second pass using collected entities."""
+        
+        # Look for function calls
+        if node.type == "call_expression":
+            called_func = self._extract_go_call_target(node, content)
+            if called_func:
+                call_line = node.start_point[0] + 1
+                
+                # Find the enclosing function by checking which entity contains this line
+                enclosing_function = None
+                for entity in entities:
+                    if (entity.type in ["function", "method"] and 
+                        entity.start_line <= call_line <= entity.end_line):
+                        enclosing_function = entity.name
+                        break
+                
+                if enclosing_function:
+                    # Create external entity if target doesn't exist
+                    target_exists = any(e.name == called_func for e in entities)
+                    if not target_exists:
+                        external_entity = ParsedEntity(
+                            name=called_func,
+                            type="function",
+                            start_line=call_line,
+                            end_line=call_line,
+                            file_path="external",
+                            language="go",
+                            metadata={"external": True, "called_from": file_path}
+                        )
+                        entities.append(external_entity)
+                    
+                    # Create relationship
+                    relation = ParsedRelation(
+                        source=enclosing_function,
+                        target=called_func,
+                        relation_type="calls",
+                        metadata={"line": call_line}
+                    )
+                    relations.append(relation)
+                    
+                    from loguru import logger
+                    logger.info(f"🔗 Created relationship: {enclosing_function} -> {called_func} (line {call_line})")
+                else:
+                    from loguru import logger
+                    logger.warning(f"⚠️  Call to {called_func} at line {call_line} outside any function")
+        
+        # Recursively collect from children  
+        for child in node.children:
+            self._collect_go_relationships(child, content, file_path, entities, relations)
     
     def _walk_go_node(
         self, 
