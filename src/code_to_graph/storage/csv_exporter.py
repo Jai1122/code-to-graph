@@ -106,11 +106,8 @@ class CSVExporter:
         logger.debug(f"Exported {len(entities)} entities to {output_file}")
     
     def _export_relationships(self, relationships: List[Relationship], output_file: Path) -> None:
-        """Export relationships CSV.
-        
-        Args:
-            relationships: Relationships to export
-            output_file: Output CSV file path
+        """Export relationships CSV with comprehensive validation.
+        CSV_VALIDATION_FIX_APPLIED - Validates and fixes null IDs before export
         """
         with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
             fieldnames = [
@@ -121,7 +118,28 @@ class CSVExporter:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
             
+            valid_relationships = 0
+            skipped_relationships = 0
+            
             for relationship in relationships:
+                # Comprehensive validation
+                if not relationship.source_id:
+                    logger.warning(f"⚠️  Skipping relationship with null source_id: {relationship.id}")
+                    skipped_relationships += 1
+                    continue
+                
+                if not relationship.target_id:
+                    logger.warning(f"⚠️  Skipping relationship with null target_id: {relationship.id}")
+                    logger.warning(f"     Properties: {relationship.properties}")
+                    skipped_relationships += 1
+                    continue
+                
+                if relationship.source_id.lower() == 'null' or relationship.target_id.lower() == 'null':
+                    logger.warning(f"⚠️  Skipping relationship with 'null' string IDs: {relationship.id}")
+                    skipped_relationships += 1
+                    continue
+                
+                # Export valid relationship
                 row = {
                     'id': relationship.id,
                     'source_id': relationship.source_id,
@@ -134,9 +152,11 @@ class CSVExporter:
                 }
                 
                 writer.writerow(row)
+                valid_relationships += 1
+            
+            logger.info(f"📊 CSV Export Summary: {valid_relationships} valid, {skipped_relationships} skipped relationships")
         
-        logger.debug(f"Exported {len(relationships)} relationships to {output_file}")
-    
+        logger.debug(f"Exported {valid_relationships} relationships to {output_file}")
     def create_import_script(
         self, 
         nodes_file: Path, 
